@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.2 - unreleased
+## 2.0.2 - 2026-10-10
 
 - **Springs that may touch only their seats.** `flex=knob,base` allows contact with those
   parts or groups in clash and travel, and still reports a spring that bows into a wall.
