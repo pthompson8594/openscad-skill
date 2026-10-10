@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.0.2 - unreleased
+
+- **Springs that may touch only their seats.** `flex=knob,base` allows contact with those
+  parts or groups in clash and travel, and still reports a spring that bows into a wall.
+  `flex=1` still leaves a part out of travel entirely.
+- **Several travel rows per group.** Each row is its own pose set, with an optional
+  `name=`. Combining every extreme in one row overshot designs where separate stops limit
+  each motion.
+- **Print support.** A piece in a multi-material plate counts as supported when it rests
+  within 0.1 mm of a supported piece. Liners and strips on their body are no longer
+  reported as mid-air.
+- **Quantities.** `qty=3` marks a part to make three times, in the print list, manifests,
+  cut list and viewer.
+- **Automatic test and release.** GitHub Actions runs the self-test on every push. Running
+  the "Test and release" workflow publishes the top CHANGELOG version, with the skill
+  file attached.
+
 ## 2.0.1 - 2026-10-10
 
 Fixes from the first real-world use on a large assembly with sculpted parts and springs.

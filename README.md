@@ -1,5 +1,7 @@
 # openscad skill
 
+[![Self-test](https://github.com/pthompson8594/openscad-skill/actions/workflows/release.yml/badge.svg)](https://github.com/pthompson8594/openscad-skill/actions/workflows/release.yml)
+
 A Claude skill for designing parts and multi-part assemblies in OpenSCAD.
 It checks its work with numbers instead of pictures, which keeps token use low
 and catches errors a render cannot show.
@@ -173,6 +175,14 @@ checks then pass.
   software and cut a test piece first.
 - Tested on Linux with OpenSCAD 2021.01 and the 2025.01 WebAssembly build.
   The self-test passes on both.
+
+## Releasing
+
+Every push runs the self-test on GitHub (the badge at the top). To publish, add a
+section at the top of `CHANGELOG.md` such as `## 2.1.0 - unreleased`, then go to
+Actions > "Test and release" > Run workflow. It runs the self-test, dates the CHANGELOG
+entry, tags `v2.1.0`, and publishes a release with that section as the notes and
+`openscad.skill` attached. It refuses to release a version that already exists.
 
 ## Licence
 

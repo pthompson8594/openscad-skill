@@ -1,0 +1,69 @@
+name: Test and release
+
+# Every push and pull request: install the skill's engines and run its self-test.
+# Release: Actions tab > "Test and release" > Run workflow. It publishes the version at
+# the top of CHANGELOG.md (stamping today's date if it says "unreleased") as tag vX.Y.Z,
+# with that section as the notes and openscad.skill attached.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Set up the skill
+        run: bash openscad/scripts/setup.sh
+      - name: Self-test
+        run: python3 openscad/scripts/asm.py --selftest
+
+  release:
+    needs: test
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the version
+        id: v
+        run: |
+          head=$(grep -m1 -E '^## [0-9]+\.[0-9]+(\.[0-9]+)?' CHANGELOG.md)
+          ver=$(echo "$head" | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+          [ -n "$ver" ] || { echo "::error::No '## X.Y.Z' heading at the top of CHANGELOG.md"; exit 1; }
+          if git ls-remote --tags origin | grep -qiE "refs/tags/v$ver\$"; then
+            echo "::error::v$ver is already released. Add a new section at the top of CHANGELOG.md first."; exit 1
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          if echo "$head" | grep -qi unreleased; then echo "stamp=yes" >> "$GITHUB_OUTPUT"; fi
+      - name: Date the CHANGELOG entry
+        if: steps.v.outputs.stamp == 'yes'
+        run: |
+          sed -i "0,/^## ${{ steps.v.outputs.version }} - unreleased/s//## ${{ steps.v.outputs.version }} - $(date -u +%Y-%m-%d)/" CHANGELOG.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release ${{ steps.v.outputs.version }}"
+          git push origin HEAD:main
+      - name: Build the skill file and notes
+        run: |
+          zip -qr openscad.skill openscad -x '*/__pycache__/*'
+          awk -v v="${{ steps.v.outputs.version }}" '
+            $0 ~ "^## " v "( |$)" {on=1; next}
+            on && /^## / {exit}
+            on {print}' CHANGELOG.md > notes.md
+          printf '\n**Install:** download `openscad.skill` below and upload it in Claude under Customize > Skills (replacing any older version). For Claude Code: `npx skills add %s --skill openscad`.\n' "$GITHUB_REPOSITORY" >> notes.md
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.v.outputs.version }}" openscad.skill \
+            --title "OpenSCAD skill ${{ steps.v.outputs.version }}" \
+            --notes-file notes.md --target "$(git rev-parse HEAD)"

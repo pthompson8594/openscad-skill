@@ -71,26 +71,27 @@ parts = [ // id, label, note, pull-apart [x,y,z], "#colour", tags — only id is
   ["base","Base","PETG",[0,0,-20],"print=auto"],
   ["knob","Knob","PETG",[0,0,25],"group=knob","print=x180"],
   ["inlay","Grip inlay","TPU",[0,0,35],"group=knob","plate=knobset","mat=TPU"],
-  ["spring","Return spring","",[0,0,10],"flex=1"],
+  ["spring","Return spring","",[0,0,10],"flex=knob,base"],
   ["hw_board","Cap board"]
 ];
 checks = [ ["knob","hw_board",">=",0.3,"travel"], ["clip","collar","==",2.3,0.05], ["stalk","base","clear"] ];
-travel = [ ["knob",[2.3,2.3,0],[5,5,0],[0,0,12]] ];  // group, ±move xyz, ±tilt° xyz, pivot (default: centre)
+travel = [ ["knob",[2.3,2.3,0],[5,5,0],[0,0,12]],   // group, ±move xyz, ±tilt° xyz, pivot (default: centre)
+           ["knob",[0,0,1.5],"name=press"] ];       // more rows per group = separate pose sets (stops that limit each motion)
 report = [ ["knob top", z0+knob_h], ["board top", 12] ];
 module pick(n){ if(part=="all"||part==n) children(); }
 pick("base") base();
 ```
 
-`hw_` ids = bought/reference hardware: shown and clash-checked, never printed or cut. One id per flat piece; pieces under one id must not touch (they count as qty). Tags: `group=` moves together in travel; `flex=1` a part that bends (spring, flexure), ignored by travel; `print=x180` / `x90,z45` / `auto` (least overhang) print orientation; `plate=` parts printed together, registered, in one 3MF; `mat=` material name in the 3MF.
+`hw_` ids = bought/reference hardware: shown and clash-checked, never printed or cut. One id per flat piece; pieces under one id must not touch (they count as qty). Tags: `group=` moves together in travel; `flex=knob,base` a part that bends (spring, flexure) and may touch those parts or groups (its seats) in clash and travel, while contact with anything else is still reported; `flex=1` leaves it out of travel entirely; `qty=3` make three (print list, manifests, cut list, viewer); `print=x180` / `x90,z45` / `auto` (least overhang) print orientation; `plate=` parts printed together, registered, in one 3MF; `mat=` material name in the 3MF.
 
 `python3 scripts/asm.py model.scad` exports every part in parallel, cached per part by its CSG tree (only parts whose geometry changed re-render), prints a line only for parts that CHANGED (`unchanged` = identical geometry; `same size, shape changed` is reported), OpenSCAD warnings, watertight faults, and the `report` values with deltas. Flags combine in one call:
 - `--only a,b` export/check a subset; the cache stays correct for later full runs; checks naming other parts are skipped; refused with `--print/--html/--bundle/--cut/--step` (those need every part). `--all` prints every part.
 - `--clash [--clear 1]` every pair: overlaps per region with volume, **depth** and where; with `--clear`, gaps under N mm. Run after every geometry change. Judge fits by depth, not volume (a 0.01 mm sliver can show several mm³). Touching = normal contact.
 - `--check` evaluates `checks` (also runs with `--clash`/`--travel`); prints failures only. Ops `>= > <= < ==` (5th value = tolerance on any op; default 0.01, or 0.05 for `==`, which absorbs `$fn` faceting), `touch`, `clear`, `overlap`; malformed rows are reported. Gap is signed: negative = penetration depth. A row ending `"travel"` must hold at every travel pose. Names are part ids, else groups.
-- `--travel [GROUP[:MM]]` moves each `travel` group to every axis extreme, the diagonal corners and each tilt (also combined); prints, per colliding pair, how many poses overlap and the worst one, plus the closest clearance. `--travel knob:2.3` = ad hoc ±2.3 mm on all axes; `--ignore a,b` leaves parts out for this run (as `flex=1` does permanently).
+- `--travel [GROUP[:MM]]` moves each `travel` group to every axis extreme, the diagonal corners and each tilt (also combined); prints, per colliding pair, how many poses overlap and the worst one, plus the closest clearance. Each row is its own pose set (named by `name=`, else `group`, `group#2`); combining all extremes in one row overshoots when separate stops limit each motion, so give each stop its own row. `--travel press` runs one row (or every row of a group). `--travel knob:2.3` = ad hoc ±2.3 mm on all axes; `--ignore a,b` leaves parts out for this run (as `flex=1` does permanently).
 - `--section y=0` (`x=`, `z=`, tilt `y=0,rz=30`; repeatable; `--size PX`, default 720) → `model_section_*.png`, one colour per part, overlaps red; prints each part's extent in the plane, in-plane overlaps (mm²) and gaps under `--clear` (default 0.5). Axis planes report world coordinates; a tilted plane reports `u,v` from the world point on the untilted axis (`x=5,rz=30` → origin (5,0,0)).
 - `--walls [1.2]` per printed part: % of surface under the limit, grouped into regions (area, thickness range, centre, span), each labelled `even wall` (a real thin wall to fix) or `tapering edge` (a feathered edge running to zero, usually fine). Follow up a region with `--section` through its centre.
-- `--print` → `model_print/`: one STL per printed part named by label, oriented by `print=` and placed on the bed (separate pieces of one part each go on the bed; a warning if they would then collide); one 3MF per `plate` (bodies registered, named, material per body; re-read and volume-checked; a warning for any piece left in mid-air); per file: height, overhang area > 45°, widest flat underside (bridge).
+- `--print` → `model_print/`: one STL per printed part named by label, oriented by `print=` and placed on the bed (separate pieces of one part each go on the bed; a warning if they would then collide); one 3MF per `plate` (bodies registered, named, material per body; re-read and volume-checked; a warning for any piece resting on nothing, i.e. not on the bed and not within 0.1 mm of a piece that is); per file: height, overhang area > 45°, widest flat underside (bridge).
 - `--holes [GAP]` holes in sheets within GAP mm that overlap but miss (`off by N mm`). Bought-hardware patterns still need a looked-up source.
 - `--cut` flat sheets → `model_cut/<id>.dxf` + `cutlist.csv`. `--step` → `model_step/<id>.step` (CadQuery, auto-installed, ~35 s first time). OpenSCAD itself cannot write STEP.
 - `--bundle` (implies `--print` and `--html`) zips model + print files + cut + step + viewer as `model_<rev>.zip` and deletes older bundles of the model; every output carries the same 7-character `rev`; outputs from an older rev are left out and named. Tell the user to upload the bundle, never loose files.

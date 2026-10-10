@@ -48,7 +48,7 @@ np = need("numpy") or sys.exit("asm.py: needs numpy (pip install numpy)")
 
 STEEL = ["#5f6f80", "#74879a", "#8a9bb0", "#a7b4c2", "#4b5a6b", "#9fb0c2", "#c98a2b", "#d9dee4"]
 HW = ["#3f7d5a", "#b5533c", "#b98a3e", "#3b4047", "#2f5f8f", "#3f7fb5", "#6a6f78", "#7a5c8f"]
-TAGS = ("group", "print", "plate", "mat", "flex")
+TAGS = ("group", "print", "plate", "mat", "flex", "qty")
 USERLIBS = [os.path.expanduser("~/.local/share/OpenSCAD/libraries"), os.path.expanduser("~/Documents/OpenSCAD/libraries")]
 PFX = [""]
 FAULTS = {"render": 0, "found": 0}
@@ -223,6 +223,13 @@ def parse_parts(rows):
             p["note"] = strs[1]
         p["hw"] = p["id"].startswith("hw_")
         p["group"] = p["tags"].get("group", p["id"])
+        fx = p["tags"].get("flex", "")
+        p["flex_all"] = fx.lower() in ("1", "true", "yes", "all")
+        p["flex_with"] = set() if p["flex_all"] or not fx else {x.strip() for x in fx.split(",") if x.strip()}
+        try:
+            p["qty"] = max(1, int(p["tags"].get("qty", "1")))
+        except ValueError:
+            p["qty"] = 1
         out.append(p)
     return out
 
@@ -517,10 +524,13 @@ def clash(parts, clear):
             continue
         ms.append(p)
     pad = max(clear, 0) + 0.01
-    hits = near = touch = pairs = 0
+    hits = near = touch = pairs = flexed = 0
     for a, b in itertools.combinations(ms, 2):
         A, B = a["man"], b["man"]
         if bbox_far(A, B, pad):
+            continue
+        if flex_pair(a, b):
+            flexed += 1
             continue
         pairs += 1
         I = A ^ B
@@ -536,7 +546,13 @@ def clash(parts, clear):
         elif clear > 0 and g < clear:
             near += 1
             say("gap %s ~ %s: %.2f mm" % (a["id"], b["id"], g))
-    say("clash: %d overlapping, %d under %.2g mm, %d touching, %d pairs tested" % (hits, near, max(clear, 0), touch, pairs))
+    say("clash: %d overlapping, %d under %.2g mm, %d touching, %d pairs tested%s" % (hits, near, max(clear, 0), touch, pairs,
+        ", %d flex contacts allowed" % flexed if flexed else ""))
+
+
+def flex_pair(a, b):
+    """contact between a and b is allowed because one of them flexes into the other"""
+    return any(x["flex_with"] & {y["id"], y["group"]} for x, y in ((a, b), (b, a)))
 
 
 def members(parts, name, group=False):
@@ -622,8 +638,8 @@ def run_checks(parts, rows, poses=None, subset=None):
         g = gap_metric(union([p["man"] for p in A]), union([p["man"] for p in B]), c["val"])
         worst, at = g, "rest"
         if c["travel"] and poses:
-            for grp, plist in poses.items():
-                ga = {p["id"] for p in members(parts, grp, True)}
+            for grp, (gname, plist) in poses.items():
+                ga = {p["id"] for p in members(parts, gname, True)}
                 mv_a, mv_b = any(p["id"] in ga for p in A), any(p["id"] in ga for p in B)
                 if not (mv_a or mv_b) or (mv_a and mv_b):
                     continue
@@ -690,12 +706,16 @@ def pose_list(d, r):
 
 
 def travel_poses(parts, rows, only):
-    res = {}
+    res, seen = {}, {}
     for r in rows or []:
         if not isinstance(r, list) or not r:
             continue
         g = r[0]
-        if only and g not in only:
+        names = [x[5:] for x in r[1:] if isinstance(x, str) and x.startswith("name=")]
+        seen[g] = seen.get(g, 0) + 1
+        label = names[0] if names else (g if seen[g] == 1 else "%s#%d" % (g, seen[g]))
+        r = [x for x in r if not (isinstance(x, str) and x.startswith("name="))]
+        if only and g not in only and label not in only:
             continue
         if any(x is None for x in r[1:2]) or (len(r) > 1 and isinstance(r[1], list) and None in r[1]):
             say("travel %s: a value is undef - define it above the travel table" % g)
@@ -718,24 +738,24 @@ def travel_poses(parts, rows, only):
             def tf(m, t=t, rr=rr, piv=piv):
                 return m.translate([-piv[0], -piv[1], -piv[2]]).rotate(rr).translate([piv[0] + t[0], piv[1] + t[1], piv[2] + t[2]])
             plist.append((n, tf))
-        res[g] = plist
+        res[label] = (g, plist)
     return res
 
 
 def travel(parts, poses, clear):
-    for g, plist in poses.items():
+    for label, (g, plist) in poses.items():
         mv = members(parts, g, True)
         ids = {p["id"] for p in mv}
-        others = [p for p in parts if p["id"] not in ids and manifold(p) is not None and not p["tags"].get("flex") and p["id"] not in IGNORE]
-        mv = [p for p in mv if not p["tags"].get("flex") and p["id"] not in IGNORE]
-        skipped = sorted({p["id"] for p in parts if p["tags"].get("flex") or p["id"] in IGNORE})
+        others = [p for p in parts if p["id"] not in ids and manifold(p) is not None and not p["flex_all"] and p["id"] not in IGNORE]
+        mv = [p for p in mv if not p["flex_all"] and p["id"] not in IGNORE]
+        skipped = sorted({p["id"] for p in parts if p["flex_all"] or p["id"] in IGNORE})
         hit, bad_poses, best = {}, set(), (1e9, "", "")
         for name, tf in plist:
             for p in mv:
                 A = tf(p["man"])
                 for o in others:
                     B = o["man"]
-                    if bbox_far(A, B, max(clear, 1.0)):
+                    if bbox_far(A, B, max(clear, 1.0)) or flex_pair(p, o):
                         continue
                     I = A ^ B
                     if I.volume() > 0.05:
@@ -750,7 +770,9 @@ def travel(parts, poses, clear):
                     gp = A.min_gap(B, max(clear, 1.0))
                     if gp < best[0]:
                         best = (gp, "%s ~ %s" % (p["id"], o["id"]), name)
-        say("travel %s: %d poses, %d with overlap%s" % (g, len(plist), len(bad_poses), " (ignoring %s)" % ", ".join(skipped) if skipped else ""))
+        fl = sorted({"%s~%s" % (p["id"], w) for p in parts for w in p["flex_with"]})
+        say("travel %s: %d poses, %d with overlap%s%s" % (label, len(plist), len(bad_poses), " (ignoring %s)" % ", ".join(skipped) if skipped else "",
+                                                        " (flex contacts allowed: %s)" % ", ".join(fl) if fl else ""))
         FAULTS["found"] += len(hit)
         for (a, b), h in sorted(hit.items(), key=lambda kv: -kv[1]["worst"][0]):
             dp, name, vol, bb = h["worst"]
@@ -955,23 +977,31 @@ def safe(s):
 
 
 def float_note(fn, tris):
-    """pieces (touching bodies merged) whose lowest point is above the bed"""
+    """pieces resting on nothing: not on the bed and not touching (within 0.1 mm) a supported piece"""
     M = m3()
     if M is None:
         return
-    body = None
+    pcs = []
     for tri in tris:
         man = manifold({"tri": tri})
         if man is not None:
-            body = man if body is None else body + man
-    if body is None:
-        return
-    cs = body.decompose()
-    up = [c.bounding_box()[2] for c in cs if c.bounding_box()[2] > 0.05]
+            pcs += man.decompose()
+    sup = [c.bounding_box()[2] < 0.05 for c in pcs]
+    grew = True
+    while grew:
+        grew = False
+        for i, c in enumerate(pcs):
+            if sup[i]:
+                continue
+            for j, d in enumerate(pcs):
+                if sup[j] and not bbox_far(c, d, 0.1) and c.min_gap(d, 0.1) <= 0.1:
+                    sup[i] = grew = True
+                    break
+    up = [c.bounding_box()[2] for c, s_ in zip(pcs, sup) if not s_]
     if up:
         FAULTS["found"] += 1
-        say("print: %s has %d of %d pieces starting above the bed (lowest at z %.1f) - they would print in mid-air; split them into their own parts or support them" % (
-            fn, len(up), len(cs), min(up)))
+        say("print: %s has %d of %d pieces resting on nothing (lowest at z %.1f) - they would print in mid-air; split them into their own parts or support them" % (
+            fn, len(up), len(pcs), min(up)))
 
 
 def drop_pieces(fn, tri):
@@ -1005,7 +1035,7 @@ def print_set(parts, outdir, rev, scad, colors):
     plates, singles = {}, []
     for p in pr:
         (plates.setdefault(p["tags"]["plate"], []) if p["tags"].get("plate") else singles).append(p)
-    lines, names = [], set()
+    lines, names, qtys = [], set(), {}
 
     def uniq(n):
         b, i = n, 2
@@ -1025,7 +1055,8 @@ def print_set(parts, outdir, rev, scad, colors):
         a, span, fz = overhang(t)
         h = hi[2] - lo[2]
         h = t[:, :, 2].max() - t[:, :, 2].min()
-        lines.append("%s | %s | %.1f mm tall | overhang %.0f mm2%s%s" % (fn, spec or "as modelled", h, a,
+        qtys[fn[:-4]] = p["qty"]
+        lines.append("%s%s | %s | %.1f mm tall | overhang %.0f mm2%s%s" % (fn, " x%d" % p["qty"] if p["qty"] > 1 else "", spec or "as modelled", h, a,
                      " | widest flat underside %.1f mm at z %.1f" % (span, fz) if span > 0.5 else "", note))
     for name, ps in plates.items():
         specs = {orient(p) for p in ps if p["tags"].get("print")}
@@ -1049,7 +1080,7 @@ def print_set(parts, outdir, rev, scad, colors):
             "" if okv else " | RE-READ CHECK FAILED"))
     for l in lines:
         say("print: " + l)
-    manifest(outdir, rev, scad)
+    manifest(outdir, rev, scad, {k: v for k, v in qtys.items() if v > 1})
     say("print: %d files -> %s (rev %s)" % (len(lines), outdir, rev))
 
 
@@ -1191,7 +1222,7 @@ def pieces(parts):
                 continue
             o["bends"] = [[b[1] - o["o"][0], b[2] - o["o"][1], b[3] - o["o"][0], b[4] - o["o"][1], b[5], b[6], b[7]] for b in p["bends"]]
             o["kf"], o["size3d"] = p["kf"], sorted(p["st"]["hi"][k] - p["st"]["lo"][k] for k in range(3))
-            out.append((p["id"], 1, o))
+            out.append((p["id"], p.get("qty", 1), o))
             continue
         groups = {}
         for v, f in components(p["tri"]):
@@ -1201,7 +1232,7 @@ def pieces(parts):
                 continue
             groups.setdefault(o["sig"], []).append(o)
         for n, (sig, g) in enumerate(sorted(groups.items(), key=lambda kv: -kv[1][0]["area"])):
-            out.append((p["id"] + ("" if len(groups) == 1 else "_%d" % (n + 1)), len(g), g[0]))
+            out.append((p["id"] + ("" if len(groups) == 1 else "_%d" % (n + 1)), len(g) * p.get("qty", 1), g[0]))
     return out, sorted(set(skipped))
 
 
@@ -1372,7 +1403,7 @@ def html(sets, path, title, rev=""):
             s = p["st"]
             pc = (np.array(s["lo"]) + np.array(s["hi"])) / 2
             dims = " x ".join("%g" % round(d, 1 if d < 10 else 0) for d in sorted((s["hi"][k] - s["lo"][k] for k in range(3)), reverse=True)) + " mm"
-            data.append({"id": p["id"], "label": p["label"], "note": (p["note"] + ", " if p["note"] else "") + dims, "hw": p["hw"], "color": cols[p["id"]],
+            data.append({"id": p["id"], "label": p["label"], "note": (p["note"] + ", " if p["note"] else "") + dims + (", make %d" % p["qty"] if p.get("qty", 1) > 1 else ""), "hw": p["hw"], "color": cols[p["id"]],
                          "ex": p["ex"] if p["ex"] is not None else ((pc - c) * 0.9).round(1).tolist(), "variant": vname or "", "shift": shift,
                          "b64": base64.b64encode(open(p["stl"], "rb").read()).decode()})
         xoff += (hi[0] - lo[0]) * 1.25 + 10
@@ -1480,7 +1511,25 @@ pick("c") translate([40,0,10]) cube([3,3,2]);
     o5 = buf.getvalue()
     res.append(("a table above the value it uses says so", "top undef (is it defined below" in o5))
     res.append(("flex=1 parts are left out of travel", "ignoring s" in o5 and "0 with overlap" in o5))
-    res.append(("print: separate pieces go on the bed; a mid-air plate piece is flagged", "2 separate pieces, each placed on the bed" in o5 and "pl.3mf has 1 of 2 pieces starting above the bed" in o5))
+    res.append(("print: separate pieces go on the bed; a mid-air plate piece is flagged", "2 separate pieces, each placed on the bed" in o5 and "pl.3mf has 1 of 2 pieces resting on nothing" in o5))
+    f3 = os.path.join(d, "fx.scad")
+    open(f3, "w").write("""part="all";
+parts = [ ["k","Knob"], ["s","Spring","",[0,0,0],"flex=k"], ["w","Wall"], ["b","Base","",[0,0,0],"plate=pl","qty=3"], ["l","Liner","",[0,0,0],"plate=pl"] ];
+travel = [ ["k",[1,0,0],"name=push"], ["k",[0,0,1],"name=lift"], ["s",[0.6,0,0]] ];
+module pick(n){ if(part=="all"||part==n) children(); }
+pick("k") cube(5);
+pick("s") translate([5,0,0]) cube([2,5,5]);
+pick("w") translate([7.5,0,0]) cube([1,5,5]);
+pick("b") translate([20,0,0]) cube([5,5,4]);
+pick("l") translate([20,0,4.02]) cube([5,5,1]);
+""")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        main([f3, "--clash", "--travel", "--print"])
+    o6 = buf.getvalue()
+    res.append(("flex=k: spring may touch the knob, not the wall", "1 flex contacts allowed" in o6 and "OVERLAP s x w" in o6 and "s x k" not in o6 and "k x s" not in o6))
+    res.append(("travel: several named rows per group", "travel push: 2 poses" in o6 and "travel lift: 2 poses" in o6))
+    res.append(("print: a liner resting 0.02 mm above its body is supported; qty shown", "resting on nothing" not in o6 and "pl.3mf" in o6))
     for name, good in res:
         print(("PASS " if good else "FAIL ") + name)
     allok = all(g for _, g in res)
@@ -1562,9 +1611,9 @@ def main(argv=None):
                 except ValueError:
                     sys.exit("asm.py: --travel GROUP:MM needs a number after the colon")
             else:
-                poses = {k: x for k, x in poses.items() if k == g}
+                poses = {k: x for k, x in poses.items() if k == g or x[0] == g}
                 if not poses:
-                    say("travel %s: not in the travel table (rows: %s); use --travel %s:MM for an ad hoc check" % (g, ", ".join(r[0] for r in t.get("travel") or []) or "none", g))
+                    say("travel %s: not in the travel table (rows: %s); use --travel %s:MM for an ad hoc check" % (g, ", ".join(sorted(travel_poses(parts, t.get("travel"), None))) or "none", g))
         if a.clash or a.clear > 0:
             clash(parts, a.clear)
         if (a.clash or a.check or a.travel is not None) and t.get("checks"):
