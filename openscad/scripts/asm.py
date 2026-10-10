@@ -48,10 +48,11 @@ np = need("numpy") or sys.exit("asm.py: needs numpy (pip install numpy)")
 
 STEEL = ["#5f6f80", "#74879a", "#8a9bb0", "#a7b4c2", "#4b5a6b", "#9fb0c2", "#c98a2b", "#d9dee4"]
 HW = ["#3f7d5a", "#b5533c", "#b98a3e", "#3b4047", "#2f5f8f", "#3f7fb5", "#6a6f78", "#7a5c8f"]
-TAGS = ("group", "print", "plate", "mat")
+TAGS = ("group", "print", "plate", "mat", "flex")
 USERLIBS = [os.path.expanduser("~/.local/share/OpenSCAD/libraries"), os.path.expanduser("~/Documents/OpenSCAD/libraries")]
 PFX = [""]
 FAULTS = {"render": 0, "found": 0}
+IGNORE = set()
 
 
 def say(*a):
@@ -165,6 +166,14 @@ def evaluate(scad, defs, cachedir):
         'echo(ASM_%s=is_undef(%s)?"__undef__":%s);\n' % (n, n, n) for n in TABLES))
     r = run_scad(["-o", e] + defargs([("part", "__none__")] + defs) + [w])
     txt = (open(e).read() if os.path.exists(e) else "") + "\n" + r.stdout + "\n" + r.stderr
+    clash_ = []
+    for name, l1, l2, l3 in re.findall(r"WARNING: [\"']?(\w+)[\"']? was assigned on line (\d+)(?: of [\"'][^\"'\n]*[\"'])? but was overwritten(?: on line (\d+)| in file [^\n]*?, line (\d+))?", txt):
+        if name in TABLES:
+            l2 = l2 or l3
+            clash_.append("`%s` is assigned twice (line %s%s): asm.py reads it as the %s table, and OpenSCAD keeps only one value for the whole file" % (
+                name, l1, " and %s" % l2 if l2 else "", name))
+    if clash_:
+        sys.exit("asm.py: name clash - rename your own variable:\n  " + "\n  ".join(clash_))
     for f in (w, e):
         if os.path.exists(f):
             os.remove(f)
@@ -185,6 +194,7 @@ def evaluate(scad, defs, cachedir):
         sys.exit("asm.py: no `parts = [ ... ];` table found")
     if not t["parts"]:
         sys.exit("asm.py: the parts table is empty")
+    t["_warn"] = [re.sub(r" in file \S*?([^/\s]+), line", r" in \1, line", x) for x in warnings_of(txt)]
     os.makedirs(cachedir, exist_ok=True)
     json.dump({"key": key, "t": t}, open(cf, "w"))
     return t
@@ -289,7 +299,13 @@ def manifold(p):
 
 
 # ------------------------------------------------------------ export ---------
-def export(scad, parts, outdir, defs):
+def part_warnings(w, model_warn):
+    key = lambda x: re.sub(r" in (file )?.*", "", re.sub(r" of [\"'][^\"']*[\"']", "", x)).replace("'", '"')
+    mw = {key(x) for x in model_warn}
+    return [x for x in w if key(x) not in mw]
+
+
+def export(scad, parts, outdir, defs, model_warn=()):
     os.makedirs(outdir, exist_ok=True)
     kf = os.path.join(outdir, ".keys.json")
     keys = json.load(open(kf)) if os.path.exists(kf) else {}
@@ -321,7 +337,7 @@ def export(scad, parts, outdir, defs):
     todo = []
     for p in parts:
         k = keys.get(p["id"], {})
-        p["warn"] = k.get("warn", [])
+        p["warn"] = part_warnings(k.get("warn", []), model_warn)
         if k.get("dep") == dep and os.path.exists(stl(p)):
             continue
         todo.append(p)
@@ -361,6 +377,7 @@ def export(scad, parts, outdir, defs):
     with ThreadPoolExecutor(max_workers=workers) as ex:
         res = list(ex.map(one, render))
     for p, err, w in res:
+        w = part_warnings(w, model_warn)
         p["err"], p["warn"] = err, w
         if err:
             keys.pop(p["id"], None)
@@ -370,8 +387,8 @@ def export(scad, parts, outdir, defs):
     return len(render)
 
 
-def load(scad, parts, outdir, defs=()):
-    n = export(scad, parts, outdir, list(defs))
+def load(scad, parts, outdir, defs=(), model_warn=()):
+    n = export(scad, parts, outdir, list(defs), model_warn)
     for p in parts:
         p["stl"] = os.path.join(outdir, p["id"] + ".stl")
         p.setdefault("err", None)
@@ -401,6 +418,7 @@ def report(parts, outdir, show_all, rendered):
             FAULTS["render"] += 1
             say("%s: NOT WATERTIGHT (%d open edges) - usually a cutter face tangent to a surface; offset it" % (p["id"], s["open"]))
         elif s["nonman"]:
+            FAULTS["render"] += 1
             say("%s: NON-MANIFOLD (%d edges shared by more than 2 faces) - solids touching along an edge; overlap or separate them" % (p["id"], s["nonman"]))
         o = prev.get(p["id"])
         size = " x ".join("%.1f" % (s["hi"][k] - s["lo"][k]) for k in range(3))
@@ -434,6 +452,9 @@ def dims_report(rows, outdir):
         if not isinstance(r, list) or len(r) < 2:
             continue
         name, v = str(r[0]), r[1]
+        if v is None:
+            out.append("%s undef (is it defined below the report table? put tables after the values they use)" % name)
+            continue
         cur[name] = v
         o = prev.get(name)
         ch = ""
@@ -549,6 +570,10 @@ OPS = (">=", ">", "<=", "<", "==", "touch", "clear", "overlap")
 def check_rows(rows):
     out, bad = [], []
     for r in rows or []:
+        if isinstance(r, list) and len(r) >= 4 and r[3] is None and r[2] in OPS[:5]:
+            say("CHECK ? %s ~ %s: value is undef - define it above the checks table" % (r[0], r[1]))
+            FAULTS["found"] += 1
+            continue
         if not isinstance(r, list) or len(r) < 3 or r[2] not in OPS or (r[2] in OPS[:5] and (len(r) < 4 or not isinstance(r[3], (int, float)))):
             bad.append(r)
             continue
@@ -672,6 +697,9 @@ def travel_poses(parts, rows, only):
         g = r[0]
         if only and g not in only:
             continue
+        if any(x is None for x in r[1:2]) or (len(r) > 1 and isinstance(r[1], list) and None in r[1]):
+            say("travel %s: a value is undef - define it above the travel table" % g)
+            continue
         d = r[1] if len(r) > 1 else 0
         d = [d] * 3 if isinstance(d, (int, float)) else list(d) + [0] * (3 - len(d))
         q = r[2] if len(r) > 2 and r[2] is not None else [0, 0, 0]
@@ -698,7 +726,9 @@ def travel(parts, poses, clear):
     for g, plist in poses.items():
         mv = members(parts, g, True)
         ids = {p["id"] for p in mv}
-        others = [p for p in parts if p["id"] not in ids and manifold(p) is not None]
+        others = [p for p in parts if p["id"] not in ids and manifold(p) is not None and not p["tags"].get("flex") and p["id"] not in IGNORE]
+        mv = [p for p in mv if not p["tags"].get("flex") and p["id"] not in IGNORE]
+        skipped = sorted({p["id"] for p in parts if p["tags"].get("flex") or p["id"] in IGNORE})
         hit, bad_poses, best = {}, set(), (1e9, "", "")
         for name, tf in plist:
             for p in mv:
@@ -720,7 +750,7 @@ def travel(parts, poses, clear):
                     gp = A.min_gap(B, max(clear, 1.0))
                     if gp < best[0]:
                         best = (gp, "%s ~ %s" % (p["id"], o["id"]), name)
-        say("travel %s: %d poses, %d with overlap" % (g, len(plist), len(bad_poses)))
+        say("travel %s: %d poses, %d with overlap%s" % (g, len(plist), len(bad_poses), " (ignoring %s)" % ", ".join(skipped) if skipped else ""))
         FAULTS["found"] += len(hit)
         for (a, b), h in sorted(hit.items(), key=lambda kv: -kv[1]["worst"][0]):
             dp, name, vol, bb = h["worst"]
@@ -764,14 +794,39 @@ def walls(parts, thr, samples=20000):
                 if dd > 1e-3:
                     th[i] = dd
                     break
-        w = ar[idx]
-        m = int(np.argmin(th))
-        under = float(np.mean(th < thr)) * 100
-        if np.isinf(th[m]):
-            say("walls %s: every wall over %.1f mm" % (p["id"], cap))
+        thin = np.where(th < thr)[0]
+        if not len(thin):
+            fin = th[np.isfinite(th)]
+            say("walls %s: nothing under %.2g mm%s" % (p["id"], thr, " (thinnest %.2f mm)" % fin.min() if len(fin) else " (every wall over %.1f mm)" % cap))
             continue
-        q = pts[m]
-        say("walls %s: thinnest %.2f mm at x%.1f y%.1f z%.1f | %.1f%% of surface under %.2g mm" % (p["id"], th[m], q[0], q[1], q[2], under, thr))
+        per = ar.sum() / k
+        sp = need("scipy")
+        from scipy.spatial import cKDTree
+        par = np.arange(len(thin))
+
+        def find(x):
+            while par[x] != x:
+                par[x] = par[par[x]]
+                x = par[x]
+            return x
+        for i, j in cKDTree(pts[thin]).query_pairs(max(1.5, thr * 1.5)):
+            par[find(i)] = find(j)
+        roots = np.array([find(i) for i in range(len(thin))])
+        regs = []
+        for r in np.unique(roots):
+            sel = thin[roots == r]
+            tv = th[sel]
+            lo3, hi3 = pts[sel].min(0), pts[sel].max(0)
+            p10, med, p90 = np.percentile(tv, [10, 50, 90])
+            kind = "tapering edge" if (p90 - p10) > 0.4 * thr or tv.min() < 0.25 * med else "even wall"
+            regs.append((len(sel) * per, tv.min(), med, kind, (lo3 + hi3) / 2, hi3 - lo3))
+        regs.sort(key=lambda x: -x[0])
+        say("walls %s: %.1f%% of surface under %.2g mm, in %d region%s" % (p["id"], len(thin) / k * 100, thr, len(regs), "" if len(regs) == 1 else "s"))
+        for a_, mn, md, kind, c3, e3 in regs[:5]:
+            say("   %s: %.0f mm2, %.2f-%.2f mm (median %.2f) around x%.1f y%.1f z%.1f, spans %.1f x %.1f x %.1f" % (
+                kind, a_, mn, min(md * 2, thr), md, c3[0], c3[1], c3[2], e3[0], e3[1], e3[2]))
+        if len(regs) > 5:
+            say("   ... %d smaller regions" % (len(regs) - 5))
 
 
 # ------------------------------------------------------------ print ----------
@@ -899,6 +954,48 @@ def safe(s):
     return re.sub(r"[^A-Za-z0-9._-]+", "_", s).strip("_") or "part"
 
 
+def float_note(fn, tris):
+    """pieces (touching bodies merged) whose lowest point is above the bed"""
+    M = m3()
+    if M is None:
+        return
+    body = None
+    for tri in tris:
+        man = manifold({"tri": tri})
+        if man is not None:
+            body = man if body is None else body + man
+    if body is None:
+        return
+    cs = body.decompose()
+    up = [c.bounding_box()[2] for c in cs if c.bounding_box()[2] > 0.05]
+    if up:
+        FAULTS["found"] += 1
+        say("print: %s has %d of %d pieces starting above the bed (lowest at z %.1f) - they would print in mid-air; split them into their own parts or support them" % (
+            fn, len(up), len(cs), min(up)))
+
+
+def drop_pieces(fn, tri):
+    """separate pieces of one printed part: each placed on the bed where it stands in x,y"""
+    man = manifold({"tri": tri})
+    if man is None:
+        return tri, ""
+    cs = man.decompose()
+    if len(cs) < 2 or all(c.bounding_box()[2] < 0.05 for c in cs):
+        return tri, ""
+    moved = [c.translate([0, 0, -c.bounding_box()[2]]) for c in cs]
+    hit = any((moved[i] ^ moved[j]).volume() > 0.01 for i in range(len(moved)) for j in range(i + 1, len(moved)))
+    if hit:
+        FAULTS["found"] += 1
+        say("print: %s has pieces at different heights that collide when each is put on the bed - split them into their own parts" % fn)
+        return tri, ""
+    out = []
+    for c in moved:
+        mh = c.to_mesh()
+        v = np.asarray(mh.vert_properties)[:, :3].astype(np.float64)
+        out.append(v[np.asarray(mh.tri_verts)])
+    return np.concatenate(out), " | %d separate pieces, each placed on the bed" % len(cs)
+
+
 def print_set(parts, outdir, rev, scad, colors):
     if os.path.isdir(outdir):
         for f in os.listdir(outdir):
@@ -923,11 +1020,13 @@ def print_set(parts, outdir, rev, scad, colors):
         lo, hi = t.reshape(-1, 3).min(0), t.reshape(-1, 3).max(0)
         t = t - np.array([(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, lo[2]])
         fn = uniq(safe(p["label"])) + ".stl"
+        t, note = drop_pieces(fn, t)
         write_stl(os.path.join(outdir, fn), t)
         a, span, fz = overhang(t)
         h = hi[2] - lo[2]
-        lines.append("%s | %s | %.1f mm tall | overhang %.0f mm2%s" % (fn, spec or "as modelled", h, a,
-                     " | widest flat underside %.1f mm at z %.1f" % (span, fz) if span > 0.5 else ""))
+        h = t[:, :, 2].max() - t[:, :, 2].min()
+        lines.append("%s | %s | %.1f mm tall | overhang %.0f mm2%s%s" % (fn, spec or "as modelled", h, a,
+                     " | widest flat underside %.1f mm at z %.1f" % (span, fz) if span > 0.5 else "", note))
     for name, ps in plates.items():
         specs = {orient(p) for p in ps if p["tags"].get("print")}
         spec = sorted(specs)[0] if specs else ""
@@ -941,6 +1040,7 @@ def print_set(parts, outdir, rev, scad, colors):
         items = [{"name": p["label"], "tri": t - sh, "mat": p["tags"].get("mat") or p["label"], "color": colors.get(p["id"])} for p, t in zip(ps, ts)]
         fn = uniq(safe(name)) + ".3mf"
         write_3mf(os.path.join(outdir, fn), items, name)
+        float_note(fn, [it["tri"] for it in items])
         back = read_3mf(os.path.join(outdir, fn))
         okv = all(abs(stats(b)["vol"] - stats(it["tri"])["vol"]) < max(0.5, 1e-3 * stats(it["tri"])["vol"]) for (_, b), it in zip(back, items))
         a, span, fz = overhang(np.concatenate([it["tri"] for it in items]))
@@ -1317,7 +1417,7 @@ def selftest():
     res.append(("clash finds the planted 25 mm3 overlap with its depth", re.search(r"OVERLAP b x c: 25\.0 mm3, depth ~1\.00", out) is not None))
     res.append(("checks: planted ==0 and <=0.4 fail, >=0.45 and touch pass", "checks: 2 pass, 2 FAIL" in out and "CHECK FAIL c ~ b ==" in out and "CHECK FAIL d ~ e <=" in out))
     res.append(("travel: block moving 1 mm down hits plate B", re.search(r"travel blk: 2 poses, 1 with overlap", out) is not None and "OVERLAP c x b at 1/2 poses; worst depth ~2.00 mm" in out))
-    res.append(("walls: 2 mm plates read as 2.00 mm", re.search(r"walls a: thinnest 2\.00", out) is not None))
+    res.append(("walls: 2 mm plates read as 2.00 mm", re.search(r"walls a: nothing under 1\.2 mm \(thinnest 2\.00", out) is not None))
     res.append(("print: block flipped, pin+sleeve in one 3MF", "Block.stl | x180" in out and re.search(r"p1\.3mf \| as modelled \| 2 bodies registered", out) is not None and "RE-READ" not in out))
     res.append(("section x=37: b and c overlap 5 mm2 in plane, in world coordinates", "OVERLAP in plane b x c: 5.00 mm2" in out and "c: y[25.00,30.00] z[3.00,9.00]" in out))
     res.append(("report table printed", "report: block top 9" in out))
@@ -1350,6 +1450,37 @@ def selftest():
     with contextlib.redirect_stdout(buf):
         main([f, "--only", "a", "--check"])
     res.append(("--only skips checks on parts outside the subset", "skipped (parts outside --only)" in buf.getvalue() and "FAIL" not in buf.getvalue().split("checks:")[-1].split("skipped")[0].replace("0 FAIL", "")))
+    f2 = os.path.join(d, "rw.scad")
+    rw = """part="all";
+travel = 2;
+parts = [ ["k","Knob","",[0,0,0],"group=k"], ["s","Spring","",[0,0,0],"flex=1"], ["b","Bumpers"], ["p","Pin","",[0,0,0],"plate=pl"], ["c","Cap","",[0,0,0],"plate=pl"] ];
+travel = [ ["k",[1,0,0]] ];
+report = [ ["top", ktop] ];
+ktop = 9;
+module pick(n){ if(part=="all"||part==n) children(); }
+pick("k") cube(5);
+pick("s") translate([5.5,0,0]) cube([1,5,5]);
+pick("b") { translate([20,0,0]) cube(3); translate([30,0,5]) cube(3); }
+pick("p") translate([40,0,0]) cube([3,3,8]);
+pick("c") translate([40,0,10]) cube([3,3,2]);
+"""
+    open(f2, "w").write(rw)
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            main([f2])
+        msg = ""
+    except SystemExit as e:
+        msg = str(e)
+    res.append(("a model parameter named like a table stops with a name-clash message", "`travel` is assigned twice" in msg))
+    open(f2, "w").write(rw.replace("travel = 2;", "travel_mm = 2;"))
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        main([f2, "--travel", "--print"])
+    o5 = buf.getvalue()
+    res.append(("a table above the value it uses says so", "top undef (is it defined below" in o5))
+    res.append(("flex=1 parts are left out of travel", "ignoring s" in o5 and "0 with overlap" in o5))
+    res.append(("print: separate pieces go on the bed; a mid-air plate piece is flagged", "2 separate pieces, each placed on the bed" in o5 and "pl.3mf has 1 of 2 pieces starting above the bed" in o5))
     for name, good in res:
         print(("PASS " if good else "FAIL ") + name)
     allok = all(g for _, g in res)
@@ -1371,6 +1502,7 @@ def main(argv=None):
     ap.add_argument("--clear", type=float, default=0)
     ap.add_argument("--travel", nargs="?", const="", default=None)
     ap.add_argument("--section", action="append", default=[])
+    ap.add_argument("--ignore", default="")
     ap.add_argument("--size", type=int, default=720)
     ap.add_argument("--walls", nargs="?", const=1.2, type=float, default=None)
     ap.add_argument("--print", dest="prnt", action="store_true")
@@ -1392,6 +1524,7 @@ def main(argv=None):
     import section as S
     for spec in a.section:
         S.parse(spec)
+    IGNORE.update(x for x in a.ignore.split(",") if x)
     base = os.path.splitext(a.scad)[0]
     t0 = evaluate(a.scad, [], base + "_parts")
     vs = t0.get("variants") or [None]
@@ -1415,7 +1548,9 @@ def main(argv=None):
         kf = t.get("k_factor") if isinstance(t.get("k_factor"), (int, float)) else 0.4
         for p in parts:
             p["bends"], p["kf"] = [b for b in (t.get("bends") or []) if b and b[0] == p["id"]], kf
-        n = load(a.scad, parts, outdir, defs)
+        for w_ in t.get("_warn") or []:
+            say("model: " + w_)
+        n = load(a.scad, parts, outdir, defs, t.get("_warn") or [])
         report(parts, outdir, a.all, n)
         dims_report(t.get("report"), outdir)
         poses = travel_poses(parts, t.get("travel"), None) if t.get("travel") else {}

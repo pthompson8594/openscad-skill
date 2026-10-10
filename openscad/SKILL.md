@@ -59,15 +59,19 @@ threaded_rod(d=10, l=20, pitch=1.5);
 
 ## Assemblies
 
-Tables at the top of the `.scad`, the single source every tool reads (values may be expressions):
+Tables near the top of the `.scad`, the single source every tool reads. Values may be expressions, but OpenSCAD reads top to bottom, so put the tables **after** the parameters and derived values they use (a table above them sees `undef`). `parts`, `checks`, `travel`, `report`, `variants`, `variant`, `bends`, `k_factor` and `part` are reserved names: don't use them for your own parameters (asm.py stops with a name-clash message).
 
 ```scad
 part = "all";
+knob_h = 18;                      // parameters and derived values first ...
+z0 = 12.4;                        // knob underside
+// ... then the tables that use them
 variant = "dome";  variants = ["dome","dish"];    // optional: each variant exported as its own set
 parts = [ // id, label, note, pull-apart [x,y,z], "#colour", tags — only id is required
   ["base","Base","PETG",[0,0,-20],"print=auto"],
   ["knob","Knob","PETG",[0,0,25],"group=knob","print=x180"],
   ["inlay","Grip inlay","TPU",[0,0,35],"group=knob","plate=knobset","mat=TPU"],
+  ["spring","Return spring","",[0,0,10],"flex=1"],
   ["hw_board","Cap board"]
 ];
 checks = [ ["knob","hw_board",">=",0.3,"travel"], ["clip","collar","==",2.3,0.05], ["stalk","base","clear"] ];
@@ -77,25 +81,25 @@ module pick(n){ if(part=="all"||part==n) children(); }
 pick("base") base();
 ```
 
-`hw_` ids = bought/reference hardware: shown and clash-checked, never printed or cut. One id per flat piece; pieces under one id must not touch (they count as qty). Tags: `group=` moves together in travel; `print=x180` / `x90,z45` / `auto` (least overhang) print orientation; `plate=` parts printed together, registered, in one 3MF; `mat=` material name in the 3MF.
+`hw_` ids = bought/reference hardware: shown and clash-checked, never printed or cut. One id per flat piece; pieces under one id must not touch (they count as qty). Tags: `group=` moves together in travel; `flex=1` a part that bends (spring, flexure), ignored by travel; `print=x180` / `x90,z45` / `auto` (least overhang) print orientation; `plate=` parts printed together, registered, in one 3MF; `mat=` material name in the 3MF.
 
 `python3 scripts/asm.py model.scad` exports every part in parallel, cached per part by its CSG tree (only parts whose geometry changed re-render), prints a line only for parts that CHANGED (`unchanged` = identical geometry; `same size, shape changed` is reported), OpenSCAD warnings, watertight faults, and the `report` values with deltas. Flags combine in one call:
 - `--only a,b` export/check a subset; the cache stays correct for later full runs; checks naming other parts are skipped; refused with `--print/--html/--bundle/--cut/--step` (those need every part). `--all` prints every part.
 - `--clash [--clear 1]` every pair: overlaps per region with volume, **depth** and where; with `--clear`, gaps under N mm. Run after every geometry change. Judge fits by depth, not volume (a 0.01 mm sliver can show several mm³). Touching = normal contact.
 - `--check` evaluates `checks` (also runs with `--clash`/`--travel`); prints failures only. Ops `>= > <= < ==` (5th value = tolerance on any op; default 0.01, or 0.05 for `==`, which absorbs `$fn` faceting), `touch`, `clear`, `overlap`; malformed rows are reported. Gap is signed: negative = penetration depth. A row ending `"travel"` must hold at every travel pose. Names are part ids, else groups.
-- `--travel [GROUP[:MM]]` moves each `travel` group to every axis extreme, the diagonal corners and each tilt (also combined); prints poses with overlaps and the closest clearance. `--travel knob:2.3` = ad hoc ±2.3 mm on all axes.
+- `--travel [GROUP[:MM]]` moves each `travel` group to every axis extreme, the diagonal corners and each tilt (also combined); prints, per colliding pair, how many poses overlap and the worst one, plus the closest clearance. `--travel knob:2.3` = ad hoc ±2.3 mm on all axes; `--ignore a,b` leaves parts out for this run (as `flex=1` does permanently).
 - `--section y=0` (`x=`, `z=`, tilt `y=0,rz=30`; repeatable; `--size PX`, default 720) → `model_section_*.png`, one colour per part, overlaps red; prints each part's extent in the plane, in-plane overlaps (mm²) and gaps under `--clear` (default 0.5). Axis planes report world coordinates; a tilted plane reports `u,v` from the world point on the untilted axis (`x=5,rz=30` → origin (5,0,0)).
-- `--walls [1.2]` thinnest wall per printed part, where, and % of surface under the limit.
-- `--print` → `model_print/`: one STL per printed part named by label, oriented by `print=` and placed on the bed; one 3MF per `plate` (bodies registered, named, material per body; re-read and volume-checked); per file: height, overhang area > 45°, widest flat underside (bridge).
+- `--walls [1.2]` per printed part: % of surface under the limit, grouped into regions (area, thickness range, centre, span), each labelled `even wall` (a real thin wall to fix) or `tapering edge` (a feathered edge running to zero, usually fine). Follow up a region with `--section` through its centre.
+- `--print` → `model_print/`: one STL per printed part named by label, oriented by `print=` and placed on the bed (separate pieces of one part each go on the bed; a warning if they would then collide); one 3MF per `plate` (bodies registered, named, material per body; re-read and volume-checked; a warning for any piece left in mid-air); per file: height, overhang area > 45°, widest flat underside (bridge).
 - `--holes [GAP]` holes in sheets within GAP mm that overlap but miss (`off by N mm`). Bought-hardware patterns still need a looked-up source.
 - `--cut` flat sheets → `model_cut/<id>.dxf` + `cutlist.csv`. `--step` → `model_step/<id>.step` (CadQuery, auto-installed, ~35 s first time). OpenSCAD itself cannot write STEP.
 - `--bundle` (implies `--print` and `--html`) zips model + print files + cut + step + viewer as `model_<rev>.zip` and deletes older bundles of the model; every output carries the same 7-character `rev`; outputs from an older rev are left out and named. Tell the user to upload the bundle, never loose files.
 - `--html [--title T]` → `model.html`: coloured touch viewer — parts table (show / see-through), pull-apart, cut plane (X/Y/Z slider, flip), tap two points to measure, variant switcher. The assembly deliverable; present unviewed.
 - `--variant A,B` limit to some variants; outputs go to per-variant subfolders, lines are prefixed `[A]`.
 
-Exit code: 0 clean · 1 a part failed, is empty or not watertight · 2 something was found (overlap, check failure, travel collision). Read the printed lines either way.
+Exit code: 0 clean · 1 a part failed, is empty, not watertight or non-manifold · 2 something was found (overlap, check failure, travel collision). Read the printed lines either way.
 
-`python3 scripts/asm.py --selftest` plants a fault for every check (overlap, check failures, travel collision, 2 mm walls, print/3MF, section overlap, hole miss, `--only` staleness, shape-changed detection, cache, open mesh, bend) and must end `selftest: PASS`; run it once after installing or editing the scripts.
+`python3 scripts/asm.py --selftest` plants a fault for every check (overlap, check failures, travel collision, 2 mm walls, print/3MF, section overlap, hole miss, `--only` staleness, shape-changed detection, cache, open mesh, bend, `--sweep` booleans, name clash, table order, `flex`, print pieces) and must end `selftest: PASS`; run it once after installing or editing the scripts.
 
 **Bent sheet.** Copy `lib/sheet.scad` beside the model. Draw each bent part as ONE flat 2D pattern with the bend allowance included, list its bends, and `fold()` it:
 
