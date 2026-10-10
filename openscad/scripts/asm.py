@@ -32,16 +32,28 @@ OSCAD = os.path.join(HERE, "oscad.sh")
 
 
 def need(mod, pipname=None):
+    """import a module, installing it with pip if missing (system, then per-user)"""
     try:
         return __import__(mod)
     except ImportError:
-        for extra in ([], ["--break-system-packages"]):
-            if subprocess.run([sys.executable, "-m", "pip", "install", "-q", pipname or mod] + extra, capture_output=True).returncode == 0:
-                break
-        try:
-            return __import__(mod)
-        except ImportError:
-            return None
+        pass
+    import importlib, site
+    err = ""
+    for extra in ([], ["--user"], ["--break-system-packages"], ["--user", "--break-system-packages"]):
+        r = subprocess.run([sys.executable, "-m", "pip", "install", "-q", pipname or mod] + extra, capture_output=True, text=True)
+        if r.returncode == 0:
+            break
+        err = (r.stderr.strip().splitlines() or [""])[-1]
+    try:
+        site.addsitedir(site.getusersitepackages())
+    except Exception:
+        pass
+    importlib.invalidate_caches()
+    try:
+        return __import__(mod)
+    except ImportError:
+        sys.stderr.write("could not install %s with pip: %s\n" % (pipname or mod, err))
+        return None
 
 
 np = need("numpy") or sys.exit("asm.py: needs numpy (pip install numpy)")

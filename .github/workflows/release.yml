@@ -18,21 +18,31 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Set up the skill
-        run: bash openscad/scripts/setup.sh
+        run: |
+          set -o pipefail
+          bash openscad/scripts/setup.sh 2>&1 | tee setup.txt || { tail -5 setup.txt | sed 's/^/::error::/'; exit 1; }
       - name: Self-test
-        run: python3 openscad/scripts/asm.py --selftest
+        run: |
+          python3 openscad/scripts/asm.py --selftest > selftest.txt 2>&1; rc=$?
+          cat selftest.txt
+          { echo '### Self-test'; echo '```'; cat selftest.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if [ $rc -ne 0 ]; then
+            grep -E "FAIL|Error|error|could not|Traceback|needs" selftest.txt | head -15 | sed 's/^/::error::/'
+            tail -3 selftest.txt | sed 's/^/::error::/'
+          fi
+          exit $rc
 
   release:
     needs: test
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Read the version
         id: v
         run: |

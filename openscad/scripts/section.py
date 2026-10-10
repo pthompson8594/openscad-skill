@@ -12,18 +12,33 @@ COLS = ["#5f8fbf", "#c98a2b", "#5aa36b", "#b5533c", "#8a6fb5", "#3f9fa8", "#b59a
 
 
 def need(mod, pipname=None):
+    """import a module, installing it with pip if missing (system, then per-user)"""
     try:
         return __import__(mod)
     except ImportError:
-        for extra in ([], ["--break-system-packages"]):
-            if subprocess.run([sys.executable, "-m", "pip", "install", "-q", pipname or mod] + extra, capture_output=True).returncode == 0:
-                break
+        pass
+    import importlib, site
+    err = ""
+    for extra in ([], ["--user"], ["--break-system-packages"], ["--user", "--break-system-packages"]):
+        r = subprocess.run([sys.executable, "-m", "pip", "install", "-q", pipname or mod] + extra, capture_output=True, text=True)
+        if r.returncode == 0:
+            break
+        err = (r.stderr.strip().splitlines() or [""])[-1]
+    try:
+        site.addsitedir(site.getusersitepackages())
+    except Exception:
+        pass
+    importlib.invalidate_caches()
+    try:
         return __import__(mod)
+    except ImportError:
+        sys.stderr.write("could not install %s with pip: %s\n" % (pipname or mod, err))
+        return None
 
 
-np = need("numpy")
-M3 = need("manifold3d")
-PIL = need("PIL", "pillow")
+np = need("numpy") or sys.exit("section.py: needs numpy")
+M3 = need("manifold3d") or sys.exit("section.py: needs manifold3d")
+PIL = need("PIL", "pillow") or sys.exit("section.py: needs pillow")
 from PIL import Image, ImageDraw, ImageFont  # noqa: E402
 
 
