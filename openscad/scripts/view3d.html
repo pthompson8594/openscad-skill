@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>__TITLE__</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&display=swap">
+<style>
+:root{--bg:#dde3e9;--panel:#f3f5f7;--ink:#16202b;--muted:#536273;--line:#b7c1cc;--accent:#1b4fa8;--on-accent:#ffffff;--sel:#e3ebf8;
+ box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#11161b;--panel:#1a2129;--ink:#e7ecf1;--muted:#9aa8b6;--line:#34414e;--accent:#8ab4ff;--on-accent:#0c1622;--sel:#243247}}
+:root[data-theme="dark"]{--bg:#11161b;--panel:#1a2129;--ink:#e7ecf1;--muted:#9aa8b6;--line:#34414e;--accent:#8ab4ff;--on-accent:#0c1622;--sel:#243247}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:Barlow,"Helvetica Neue",Arial,system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+header{padding:10px 14px 6px}
+h1{font-size:17px;font-weight:600;margin:0;line-height:1.25}
+#info{font-size:14px;color:var(--muted);margin:2px 0 0;min-height:2.5em;line-height:1.25}
+#info b{color:var(--ink);font-weight:600}
+#stage{flex:1;min-height:0;position:relative}
+#stage canvas{display:block;width:100%;height:100%;touch-action:none}
+button{font:inherit;font-size:14px;font-weight:500;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;min-height:40px;padding:0 12px;cursor:pointer;white-space:nowrap}
+button[aria-pressed="true"],button[aria-expanded="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#pbtn{position:absolute;top:8px;right:10px;z-index:3}
+#plist{position:absolute;top:54px;right:10px;z-index:2;width:min(300px,calc(100% - 20px));max-height:calc(100% - 118px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+#plist[hidden]{display:none}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{font-weight:500;color:var(--muted);font-size:12px;text-align:center;padding:6px 4px;border-bottom:1px solid var(--line);line-height:1.1}
+th:first-child{text-align:left;padding-left:10px}
+td{padding:0;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+tr.sel td{background:var(--sel)}
+tr.grp td{font-weight:600}
+td.nm{padding:6px 4px 6px 10px;cursor:pointer;line-height:1.2}
+td.nm i{display:inline-block;width:11px;height:11px;border-radius:2px;border:1px solid var(--line);margin-right:7px;vertical-align:-1px}
+td.ck{width:52px;text-align:center}
+td.ck label{display:flex;align-items:center;justify-content:center;min-height:40px;cursor:pointer}
+input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);margin:0}
+#selbar{position:absolute;left:10px;bottom:10px;z-index:2;display:flex;gap:8px}
+#selbar[hidden]{display:none}
+#panel{background:var(--panel);border-top:1px solid var(--line);padding:8px 14px 10px}
+.row{display:flex;align-items:center;gap:10px}
+.row label{font-size:14px;font-weight:500;white-space:nowrap}
+input[type=range]{flex:1;min-width:0;height:44px;accent-color:var(--accent)}
+select{font:inherit;font-size:14px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;min-height:40px;padding:0 8px}
+.row+.row{margin-top:4px}
+#vrow[hidden]{display:none}
+</style>
+</head>
+<body>
+<header>
+<h1>__TITLE__</h1>
+<p id="info"></p>
+</header>
+<div id="stage">
+ <button id="pbtn" aria-expanded="false" aria-controls="plist">Parts</button>
+ <div id="plist" hidden><table><thead><tr><th>Part</th><th>Show</th><th>See<br>through</th></tr></thead><tbody id="rows"></tbody></table></div>
+ <div id="selbar" hidden><button id="sg" aria-pressed="false">See through</button><button id="sh">Hide</button></div>
+</div>
+<div id="panel">
+ <div class="row" id="vrow" hidden>
+  <label for="vs">Variant</label>
+  <select id="vs"></select>
+ </div>
+ <div class="row">
+  <label for="ex">Pull apart</label>
+  <input id="ex" type="range" min="0" max="100" value="0">
+  <button id="rv">Reset</button>
+ </div>
+ <div class="row">
+  <label for="ca">Cut</label>
+  <select id="ca" aria-label="Cut axis"><option value="">Off</option><option>X</option><option>Y</option><option>Z</option></select>
+  <input id="cs" type="range" min="0" max="1000" value="500" aria-label="Cut position" disabled>
+  <button id="cf" aria-pressed="false" disabled>Flip</button>
+  <button id="ms" aria-pressed="false">Measure</button>
+ </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>window.THREE||document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"><\/script>')</script>
+<script>window.THREE||document.write('<script src="https://unpkg.com/three@0.128.0/build/three.min.js"><\/script>')</script>
+<script>
+const PARTS=__PARTS__;
+const $=id=>document.getElementById(id);
+const stage=$('stage'),info=$('info'),rows=$('rows'),plist=$('plist'),pbtn=$('pbtn'),selbar=$('selbar');
+const REV='__REV__',HINT='Drag to turn, pinch to zoom, tap a piece to name it.'+(REV?' Rev '+REV+'.':'');
+PARTS.forEach(p=>{p.shift=p.shift||[0,0,0];p.variant=p.variant||'';});
+const VARS=[...new Set(PARTS.map(p=>p.variant))];
+function stl(b64){const s=atob(b64),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);
+ const dv=new DataView(u.buffer),n=dv.getUint32(80,true),p=new Float32Array(n*9);let o=84;
+ for(let i=0;i<n;i++){o+=12;for(let j=0;j<9;j++){p[i*9+j]=dv.getFloat32(o,true);o+=4;}o+=2;}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(p,3));g.computeVertexNormals();return g;}
+info.textContent=HINT;
+let ok=true,ren;
+if(!window.THREE){ok=false;info.textContent='The 3D library could not be downloaded (no internet connection?), so the model cannot be shown. Open this page again when online.';pbtn.hidden=true;}
+else try{ren=new THREE.WebGLRenderer({antialias:true});}catch(e){ok=false;info.textContent='This device could not start 3D graphics, so the model cannot be shown here.';pbtn.hidden=true;}
+if(ok){
+const scene=new THREE.Scene(),root=new THREE.Group();root.rotation.x=-Math.PI/2;scene.add(root);
+scene.add(new THREE.HemisphereLight(0xffffff,0x56606c,0.85));
+const cam=new THREE.PerspectiveCamera(38,1,1,50000);
+const dl=new THREE.DirectionalLight(0xffffff,0.65);cam.add(dl);dl.position.set(-0.5,1,1);scene.add(cam);
+ren.setPixelRatio(Math.min(window.devicePixelRatio||1,2));ren.localClippingEnabled=true;
+const clip=new THREE.Plane(new THREE.Vector3(1,0,0),0),CLIPS=[];stage.insertBefore(ren.domElement,stage.firstChild);
+const box=new THREE.Box3();let sel=null;
+function ck(on,fn,name){const td=document.createElement('td');td.className='ck';const l=document.createElement('label'),c=document.createElement('input');
+ c.type='checkbox';c.checked=on;c.setAttribute('aria-label',name);c.onchange=()=>fn(c.checked);l.appendChild(c);td.appendChild(l);return [td,c];}
+function row(name,color,cls){const tr=document.createElement('tr');if(cls)tr.className=cls;const td=document.createElement('td');td.className='nm';
+ if(color){const sw=document.createElement('i');sw.style.background=color;td.appendChild(sw);}td.appendChild(document.createTextNode(name));tr.appendChild(td);rows.appendChild(tr);return [tr,td];}
+function paint(p){const m=p.mesh;m.visible=p.on&&p.vis!==false;m.material.transparent=p.glass;m.material.opacity=p.glass?0.1:1;m.material.depthWrite=!p.glass;m.material.needsUpdate=true;m.renderOrder=p.glass?1:0;if(p.back)p.back.visible=!p.glass;
+ p.c1.checked=p.on;p.c2.checked=p.glass;if(sel===p)bar();}
+function group(name,list){const [tr]=row(name,null,'grp');
+ const a=ck(true,v=>list.forEach(p=>{p.on=v;paint(p);}),'Show '+name),b=ck(false,v=>list.forEach(p=>{p.glass=v;paint(p);}),'See through '+name);tr.appendChild(a[0]);tr.appendChild(b[0]);}
+group('All parts',PARTS);
+const hw=PARTS.filter(p=>p.hw);if(hw.length&&hw.length<PARTS.length)group('Hardware',hw);
+const mbox=new THREE.Box3();let lastVar=null;
+PARTS.forEach(p=>{const g=stl(p.b64);g.computeBoundingBox();const bb=g.boundingBox.clone().translate(new THREE.Vector3(...p.shift));box.union(bb);mbox.union(g.boundingBox);
+ const m=new THREE.Mesh(g,new THREE.MeshPhongMaterial({color:p.color,side:THREE.FrontSide,shininess:20,clippingPlanes:CLIPS}));
+ const back=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:new THREE.Color(p.color).multiplyScalar(0.45),side:THREE.BackSide,clippingPlanes:CLIPS}));
+ m.userData=p;back.userData=p;m.add(back);m.add(new THREE.LineSegments(new THREE.EdgesGeometry(g,30),new THREE.LineBasicMaterial({color:0x10161d,transparent:true,opacity:0.5,clippingPlanes:CLIPS})));root.add(m);
+ p.mesh=m;p.back=back;p.on=true;p.glass=false;
+ if(VARS.length>1&&p.variant!==lastVar){row('Variant '+p.variant,null,'grp');lastVar=p.variant;}
+ const [tr,td]=row(p.label,p.color);p.tr=tr;td.onclick=()=>pickPart(p);
+ const a=ck(true,v=>{p.on=v;paint(p);},'Show '+p.label),b=ck(false,v=>{p.glass=v;paint(p);},'See through '+p.label);
+ p.c1=a[1];p.c2=b[1];tr.appendChild(a[0]);tr.appendChild(b[0]);});
+function bar(){selbar.hidden=!sel;if(sel){$('sg').setAttribute('aria-pressed',String(sel.glass));$('sh').textContent=sel.on?'Hide':'Show';}}
+function pickPart(p){if(sel)sel.tr.classList.remove('sel');sel=p;if(!p){info.textContent=HINT;bar();return;}
+ p.tr.classList.add('sel');info.innerHTML='';const b=document.createElement('b');b.textContent=p.label;info.appendChild(b);info.appendChild(document.createTextNode(' \u2013 '+p.note));
+ if(!plist.hidden)p.tr.scrollIntoView({block:'nearest'});bar();}
+$('sg').onclick=()=>{if(sel){sel.glass=!sel.glass;paint(sel);}};
+$('sh').onclick=()=>{if(sel){sel.on=!sel.on;paint(sel);}};
+function openList(v){plist.hidden=!v;pbtn.setAttribute('aria-expanded',String(v));}
+pbtn.onclick=()=>openList(plist.hidden);
+const ctr=box.getCenter(new THREE.Vector3());let R=box.getSize(new THREE.Vector3()).length()/2||100;
+const C0=new THREE.Vector3(ctr.x,ctr.z,-ctr.y);
+let tgt=C0.clone(),th=1.95,ph=1.08,zoom=1,k=0,fit=R*3;
+function dirv(){return new THREE.Vector3(Math.sin(ph)*Math.cos(th),Math.cos(ph),Math.sin(ph)*Math.sin(th));}
+function size(){const w=stage.clientWidth,h=stage.clientHeight;if(!w||!h)return;ren.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();
+ const v=cam.fov*Math.PI/360,hf=Math.atan(Math.tan(v)*cam.aspect);fit=R*1.08/Math.sin(Math.min(v,hf));}
+function explode(){PARTS.forEach(p=>p.mesh.position.set(p.shift[0]+p.ex[0]*k,p.shift[1]+p.ex[1]*k,p.shift[2]+p.ex[2]*k));}
+function theme(){scene.background=new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()||'#dde3e9');}
+const ex=$('ex');ex.oninput=()=>{k=ex.value/100;explode();};
+$('rv').onclick=()=>{tgt=C0.clone();th=1.95;ph=1.08;zoom=1;k=0;ex.value=0;explode();PARTS.forEach(p=>{p.on=true;p.glass=false;paint(p);});pickPart(null);
+ $('ca').value='';cut();clearMeasure();measuring=false;$('ms').setAttribute('aria-pressed','false');if(VARS.length>1){$('vs').value='';showVar('');}};
+// --- cut plane (model coordinates; root turns model z up into world y) ---
+const AX={X:[new THREE.Vector3(1,0,0),0],Y:[new THREE.Vector3(0,0,-1),1],Z:[new THREE.Vector3(0,1,0),2]};
+let flip=false;
+function cut(){const a=$('ca').value;CLIPS.length=0;$('cs').disabled=!a;$('cf').disabled=!a;
+ if(a){const [n,i]=AX[a],lo=[mbox.min.x,mbox.min.y,mbox.min.z][i],hi=[mbox.max.x,mbox.max.y,mbox.max.z][i];
+  const v=lo+(hi-lo)*$('cs').value/1000;const s=flip?1:-1;clip.normal.copy(n).multiplyScalar(s);clip.constant=-s*v;CLIPS.push(clip);
+  info.textContent='Cut at '+a.toLowerCase()+' = '+v.toFixed(1)+' mm'+(flip?' (showing the far side)':'')+'. Inside faces are shaded darker.';}
+ else if(!sel)info.textContent=HINT;}
+$('ca').onchange=cut;$('cs').oninput=cut;
+$('cf').onclick=()=>{flip=!flip;$('cf').setAttribute('aria-pressed',String(flip));cut();};
+// --- measure: tap two points, distance in model millimetres ---
+let measuring=false;const mpts=[],mobj=new THREE.Group();scene.add(mobj);
+function clearMeasure(){mpts.length=0;while(mobj.children.length)mobj.remove(mobj.children[0]);}
+$('ms').onclick=()=>{measuring=!measuring;$('ms').setAttribute('aria-pressed',String(measuring));clearMeasure();
+ info.textContent=measuring?'Measure: tap the first point.':HINT;};
+function dot(w){const s=new THREE.Mesh(new THREE.SphereGeometry(R*0.012,12,8),new THREE.MeshBasicMaterial({color:0xd8342c,depthTest:false}));s.position.copy(w);s.renderOrder=5;mobj.add(s);}
+function measureHit(hit){if(mpts.length>=2)clearMeasure();
+ const local=hit.object.worldToLocal(hit.point.clone());mpts.push({w:hit.point.clone(),m:local,p:hit.object.userData});dot(hit.point);
+ if(mpts.length===1){info.textContent='Measure: first point on '+mpts[0].p.label+' ('+[local.x,local.y,local.z].map(v=>v.toFixed(1)).join(', ')+'). Tap the second point.';return;}
+ const [a,b]=mpts,d=new THREE.Vector3().subVectors(b.m,a.m);
+ const g=new THREE.BufferGeometry().setFromPoints([a.w,b.w]);const l=new THREE.Line(g,new THREE.LineBasicMaterial({color:0xd8342c,depthTest:false}));l.renderOrder=5;mobj.add(l);
+ info.innerHTML='';const bb=document.createElement('b');bb.textContent=d.length().toFixed(2)+' mm';info.appendChild(bb);
+ info.appendChild(document.createTextNode(' \u2013 dx '+d.x.toFixed(2)+', dy '+d.y.toFixed(2)+', dz '+d.z.toFixed(2)+(a.p===b.p?' on '+a.p.label:' from '+a.p.label+' to '+b.p.label)+(k>0?' (pull-apart is ignored)':'')));}
+// --- variants ---
+function showVar(v){PARTS.forEach(p=>{p.vis=!v||p.variant===v;paint(p);});
+ const b=new THREE.Box3();PARTS.filter(p=>p.vis).forEach(p=>{p.mesh.geometry.computeBoundingBox();b.union(p.mesh.geometry.boundingBox.clone().translate(new THREE.Vector3(...p.shift)));});
+ const c=b.getCenter(new THREE.Vector3());tgt=new THREE.Vector3(c.x,c.z,-c.y);R=b.getSize(new THREE.Vector3()).length()/2||100;zoom=1;size();}
+if(VARS.length>1){$('vrow').hidden=false;const vs=$('vs');const o=document.createElement('option');o.value='';o.textContent='All, side by side';vs.appendChild(o);
+ VARS.forEach(v=>{const q=document.createElement('option');q.value=v;q.textContent=v;vs.appendChild(q);});vs.onchange=()=>showVar(vs.value);}
+const cv=ren.domElement,pts=new Map();let moved=0,pd=0,pm=null;
+function mid(){const a=[...pts.values()];return {x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2,d:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)};}
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);pts.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pts.size===1)moved=0;if(pts.size===2){pm=mid();pd=pm.d;}});
+cv.addEventListener('pointermove',e=>{const p=pts.get(e.pointerId);if(!p)return;const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;
+ if(pts.size===1){moved+=Math.abs(dx)+Math.abs(dy);th+=dx*0.008;ph=Math.min(3.0,Math.max(0.12,ph-dy*0.008));}
+ else if(pts.size===2){const m=mid();if(pd>0&&m.d>0)zoom=Math.min(4,Math.max(0.2,zoom*pd/m.d));pd=m.d;
+  const s=fit*zoom*0.0016,r=new THREE.Vector3().crossVectors(cam.up,dirv()).normalize();tgt.addScaledVector(r,-(m.x-pm.x)*s);tgt.y+=(m.y-pm.y)*s;pm=m;moved+=9;}});
+cv.addEventListener('pointerup',e=>{const had=pts.size;pts.delete(e.pointerId);if(had===1&&moved<8)tap(e);});
+cv.addEventListener('pointercancel',e=>pts.delete(e.pointerId));
+cv.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.min(4,Math.max(0.2,zoom*(e.deltaY>0?1.1:0.9)));},{passive:false});
+const ray=new THREE.Raycaster();
+function tap(e){const r=cv.getBoundingClientRect();ray.setFromCamera(new THREE.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),cam);
+ const hits=ray.intersectObjects(PARTS.filter(p=>p.on&&p.vis!==false&&!p.glass).flatMap(p=>[p.mesh,p.back]),false).filter(h=>!CLIPS.length||clip.distanceToPoint(h.point)>=0);
+ const hit=hits[0];if(measuring){if(hit)measureHit(hit);return;}pickPart(hit?hit.object.userData:null);}
+addEventListener('resize',size);if(window.ResizeObserver)new ResizeObserver(size).observe(stage);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',theme);
+new MutationObserver(theme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+size();explode();theme();if(stage.clientWidth>=720)openList(true);
+(function loop(){requestAnimationFrame(loop);const rad=fit*zoom*(1+0.5*k);cam.position.copy(tgt).addScaledVector(dirv(),rad);cam.lookAt(tgt);ren.render(scene,cam);})();
+}
+</script>
+</body>
+</html>

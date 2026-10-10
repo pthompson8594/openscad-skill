@@ -1,0 +1,12 @@
+__pycache__/
+*_parts/
+*_cut/
+*_step/
+*.zip
+*.stl
+*.html
+!openscad/scripts/view3d.html
+*.skill
+*_print/
+*_section_*.png
+*.3mf
