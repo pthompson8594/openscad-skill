@@ -2,7 +2,7 @@
 
 ## 2.0.1 - 2026-10-10
 
-From the first real-world run, on a six-axis controller with sculpted parts and springs.
+Fixes from the first real-world use on a large assembly with sculpted parts and springs.
 
 - **Name clash stops the run.** If a model's own parameter has the same name as a table
   (for example `travel = 2` alongside the `travel` table), asm.py now stops and names both
@@ -24,7 +24,7 @@ From the first real-world run, on a six-axis controller with sculpted parts and 
 
 ## 2.0 - 2026-10-10
 
-Rebuilt after a long session designing a six-axis controller, plus an independent review.
+Rebuilt after heavy use on a complex multi-part design, plus an independent review.
 
 **Faster**
 - Renders with OpenSCAD 2025 and the Manifold engine. Where no native build has it,
