@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.1.0 - unreleased
+## 2.1.0 - 2026-10-11
 
 - **Viewer: inspect small parts.** On a computer, right-drag or Shift-drag moves the
   model, and the wheel zooms toward the cursor. Pinch zooms toward the fingers.
