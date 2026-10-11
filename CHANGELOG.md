@@ -1,18 +1,7 @@
 # Changelog
 
-## 2.0.2 - 2026-10-10
+## 2.1.0 - unreleased
 
-- **Springs that may touch only their seats.** `flex=knob,base` allows contact with those
-  parts or groups in clash and travel, and still reports a spring that bows into a wall.
-  `flex=1` still leaves a part out of travel entirely.
-- **Several travel rows per group.** Each row is its own pose set, with an optional
-  `name=`. Combining every extreme in one row overshot designs where separate stops limit
-  each motion.
-- **Print support.** A piece in a multi-material plate counts as supported when it rests
-  within 0.1 mm of a supported piece. Liners and strips on their body are no longer
-  reported as mid-air.
-- **Quantities.** `qty=3` marks a part to make three times, in the print list, manifests,
-  cut list and viewer.
 - **Viewer: inspect small parts.** On a computer, right-drag or Shift-drag moves the
   model, and the wheel zooms toward the cursor. Pinch zooms toward the fingers.
   Double-click or double-tap a part, or pick it in the list and press "Zoom to it", to
@@ -44,6 +33,20 @@
     - Text the model prints is labelled `model says:`, and SKILL.md tells Claude not to
       follow instructions in it.
     - The `render.sh` viewers get the same content security policy.
+
+## 2.0.2 - 2026-10-10
+
+- **Springs that may touch only their seats.** `flex=knob,base` allows contact with those
+  parts or groups in clash and travel, and still reports a spring that bows into a wall.
+  `flex=1` still leaves a part out of travel entirely.
+- **Several travel rows per group.** Each row is its own pose set, with an optional
+  `name=`. Combining every extreme in one row overshot designs where separate stops limit
+  each motion.
+- **Print support.** A piece in a multi-material plate counts as supported when it rests
+  within 0.1 mm of a supported piece. Liners and strips on their body are no longer
+  reported as mid-air.
+- **Quantities.** `qty=3` marks a part to make three times, in the print list, manifests,
+  cut list and viewer.
 - **Automatic test and release.** GitHub Actions runs the self-test on every push. Running
   the "Test and release" workflow publishes the top CHANGELOG version, with the skill
   file attached.
