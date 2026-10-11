@@ -95,5 +95,8 @@ if (!fixed.some((a) => a.startsWith("--backend"))) fixed.unshift("--backend=Mani
 let rc = 0;
 try { rc = m.callMain(fixed); }
 catch (e) { rc = typeof e?.status === "number" ? e.status : 1; if (typeof e?.status !== "number") console.error("ERROR: " + e); }
-for (const f of outs) { try { fs.writeFileSync(f, FS.readFile(f)); } catch (e) {} }
+for (const f of outs) {      // never write through a symlink planted at an output name
+  try { if (fs.lstatSync(f).isSymbolicLink()) fs.unlinkSync(f); } catch (e) {}
+  try { fs.writeFileSync(f, FS.readFile(f), { flag: "wx" }); } catch (e) { try { fs.unlinkSync(f); fs.writeFileSync(f, FS.readFile(f), { flag: "wx" }); } catch (e2) {} }
+}
 process.exit(rc);

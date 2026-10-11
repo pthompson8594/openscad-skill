@@ -229,7 +229,8 @@ def evaluate(scad, defs, cachedir):
     return t
 
 
-ID_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+ID_OK = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,62}[A-Za-z0-9_-])?$")
+BIDI = re.compile("[\u200e\u200f\u202a-\u202e\u2066-\u2069\x00-\x1f\x7f]")
 COLOR_OK = re.compile(r"^#[0-9A-Fa-f]{3,8}$")
 
 
@@ -258,7 +259,7 @@ def parse_parts(rows):
         if len(strs) > 1:
             p["note"] = strs[1]
         p["hw"] = p["id"].startswith("hw_")
-        p["label"], p["note"] = p["label"][:120], p["note"][:300]
+        p["label"], p["note"] = BIDI.sub("", p["label"])[:120], BIDI.sub("", p["note"])[:300]
         p["group"] = p["tags"].get("group", p["id"])
         fx = p["tags"].get("flex", "")
         p["flex_all"] = fx.lower() in ("1", "true", "yes", "all")
@@ -1018,6 +1019,30 @@ def safe(s):
     return s[:80] or "part"
 
 
+def defuse(base):
+    """remove symlinks planted where this run writes (the links only, never their targets)"""
+    d, b = os.path.split(base)
+    d = d or "."
+    gone = []
+    for f in os.listdir(d):
+        q = os.path.join(d, f)
+        ours = f == b + ".html" or (f.startswith(b + "_") and (f.endswith((".zip", ".png")) or f[len(b) + 1:] in ("parts", "print", "cut", "step"))) or f.startswith(".asm_eval_")
+        if not ours:
+            continue
+        if os.path.islink(q):
+            os.unlink(q)
+            gone.append(f)
+        elif os.path.isdir(q):
+            for dp, dn, fn in os.walk(q):
+                for n in dn + fn:
+                    r = os.path.join(dp, n)
+                    if os.path.islink(r):
+                        os.unlink(r)
+                        gone.append(os.path.relpath(r, d))
+    if gone:
+        say("removed planted links where outputs go (targets untouched): " + ", ".join(sorted(gone)[:8]))
+
+
 def inside(path, root):
     """refuse to write or delete anywhere but under the model's folder"""
     rp, rr = os.path.realpath(path), os.path.realpath(root)
@@ -1626,6 +1651,27 @@ pick("l") translate([20,0,4.02]) cube([5,5,1]);
     open(os.path.join(sd, "c.scad"), "w").write("cube(3);\n")
     subprocess.run(["bash", os.path.join(HERE, "render.sh"), "c.scad", "--no-png", "--cut", "z"], cwd=sd, capture_output=True, text=True, env=scad_env())
     res.append(("render.sh never imports Python files planted next to a model", not os.path.exists(marker)))
+    victim = os.path.join(d, "victim.txt")
+    open(victim, "w").write("ORIGINAL")
+    pd_ = os.path.join(sd, "p")
+    os.makedirs(os.path.join(pd_, "pl_print"))
+    open(os.path.join(pd_, "pl.scad"), "w").write('part="all";\nparts=[["a","Bracket"]];\nmodule pick(n){ if(part=="all"||part==n) children(); }\npick("a") cube(2);\n')
+    for q in ("pl_print/Bracket.stl", "pl.html", "pl.stl"):
+        os.symlink(victim, os.path.join(pd_, q))
+    with contextlib.redirect_stdout(io.StringIO()):
+        main([os.path.join(pd_, "pl.scad"), "--print", "--html"])
+    subprocess.run(["bash", os.path.join(HERE, "render.sh"), "pl.scad", "--no-png"], cwd=pd_, capture_output=True, text=True, env=scad_env())
+    os.link(secret, os.path.join(pd_, "hard.scad"))
+    open(os.path.join(pd_, "pl.scad"), "a").write("use <hard.scad>\n")
+    with contextlib.redirect_stdout(io.StringIO()):
+        try:
+            main([os.path.join(pd_, "pl.scad"), "--bundle"])
+        except SystemExit:
+            pass
+    zs = [x for x in os.listdir(pd_) if x.endswith(".zip")]
+    hard_leak = any(b"PRIVATE-KEY-MATERIAL" in zipfile.ZipFile(os.path.join(pd_, z)).read(n) for z in zs for n in zipfile.ZipFile(os.path.join(pd_, z)).namelist())
+    res.append(("links planted at output names are removed, never written through; hard links are not bundled",
+                open(victim).read() == "ORIGINAL" and not os.path.islink(os.path.join(pd_, "pl.html")) and not hard_leak))
     global TIMEOUT
     old, TIMEOUT = TIMEOUT, 3
     f6 = os.path.join(sd, "slow.scad")
@@ -1686,6 +1732,7 @@ def main(argv=None):
         S.parse(spec)
     IGNORE.update(x for x in a.ignore.split(",") if x)
     base = os.path.splitext(a.scad)[0]
+    defuse(base)
     t0 = evaluate(a.scad, [], base + "_parts")
     vs = t0.get("variants") or [None]
     if t0.get("variants") and not all((isinstance(v, str) and ID_OK.match(v) and ".." not in v) or (isinstance(v, (int, float)) and not isinstance(v, bool)) for v in vs):
@@ -1742,10 +1789,11 @@ def main(argv=None):
             walls(parts, a.walls)
         if a.holes is not None:
             holes(parts, a.holes)
+        root_ = os.path.dirname(os.path.abspath(a.scad))
         if a.cut:
-            cut(parts, base + "_cut" + sub, rev, a.scad)
+            cut(parts, inside(base + "_cut" + sub, root_), rev, a.scad)
         if a.step:
-            step(parts, base + "_step" + sub, rev, a.scad)
+            step(parts, inside(base + "_step" + sub, root_), rev, a.scad)
         if a.prnt or a.bundle:
             print_set(parts, base + "_print" + sub, rev, a.scad, colours(parts))
         sets.append((v, parts))
@@ -1764,8 +1812,8 @@ def main(argv=None):
             for f in sorted(deps(a.scad)):
                 if not f.endswith(".scad") or not f.startswith(root + os.sep):
                     continue
-                if os.path.islink(f) or not os.path.realpath(f).startswith(rroot + os.sep):
-                    say("bundle: left out %s - it is a link to a file outside the model folder" % os.path.relpath(f, root))
+                if os.path.islink(f) or os.stat(f).st_nlink > 1 or not os.path.realpath(f).startswith(rroot + os.sep):
+                    say("bundle: left out %s - it is a link (symbolic or hard) to another file" % os.path.relpath(f, root))
                     continue
                 zf.write(f, os.path.relpath(f, root))
             stale = []

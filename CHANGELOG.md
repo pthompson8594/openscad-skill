@@ -33,6 +33,13 @@
     - Text the model prints is labelled `model says:`, and SKILL.md tells Claude not to
       follow instructions in it.
     - The `render.sh` viewers get the same content security policy.
+  - From the re-test:
+    - Symlinks planted at output file names are removed before writing (only the link,
+      never its target).
+    - Hard-linked files are kept out of bundles.
+    - `render.sh` labels model-printed warnings too.
+    - Hidden direction-control characters are stripped from labels.
+    - Ids can't end in a dot.
 
 ## 2.0.2 - 2026-10-10
 

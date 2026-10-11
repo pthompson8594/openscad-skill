@@ -102,6 +102,12 @@ if [[ -n "$OUTBASE" ]]; then
   base="$(dirname "$MODEL")/$OUTBASE"
 fi
 
+# remove symlinks planted where this run writes (the links only, never their targets)
+for f in "${base}.stl" "${base}.html" "${base}_marked.html" "${base}_marked.png" "${base}_view.scad" "${base}_cutwrap.scad" \
+         "${base}_iso.png" "${base}_front.png" "${base}_top.png" "${base}_cut.png" "${base}_cut3d.png" "${base}"_mk[1-4].png; do
+  [[ -L "$f" ]] && { rm -f "$f"; echo ">> removed a planted link at $(basename "$f") (its target is untouched)"; }
+done
+
 XVFB=""
 if [[ -z "${DISPLAY:-}" ]] && command -v xvfb-run >/dev/null 2>&1; then
   XVFB="xvfb-run -a"
@@ -119,7 +125,7 @@ run_oscad() {
     exit 1
   fi
   grep -q "top level object is empty" <<<"$out" && echo ">> EMPTY geometry | vol 0 mm^3 (for intersection checks: no overlap)"
-  echo "$out" | grep -E '^(WARNING|ERROR|DEPRECATED)' | sort -u || true
+  echo "$out" | grep -E '^(WARNING|ERROR|DEPRECATED)' | sort -u | sed 's/^/model says: /' || true
 }
 
 run_png() {
@@ -136,7 +142,7 @@ run_png() {
     fi
     exit 1
   fi
-  echo "$out" | grep -E '^(WARNING|ERROR)' | sort -u || true
+  echo "$out" | grep -E '^(WARNING|ERROR)' | sort -u | sed 's/^/model says: /' || true
 }
 
 stl_info() {  # line1 summary, line2 "MX MY MZ", line3 "VOL", line4 "LOX LOY LOZ HIX HIY HIZ"

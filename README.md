@@ -190,7 +190,8 @@ checks then pass.
   from PyPI within tested version ranges. They are not hash-pinned. In a locked-down
   environment, install them yourself first and the scripts will use them.
 - **Runs safely in a model's folder.** The scripts never import Python from the
-  model's folder, refuse to write or delete outside it, skip symlinks when bundling,
+  model's folder, refuse to write or delete outside it, remove symlinks planted where outputs go
+  (never following them), skip symbolic and hard links when bundling,
   and stop any OpenSCAD run after 15 minutes (`OSCAD_TIMEOUT` changes this).
 - **Nothing personal in outputs.** STL, 3MF, DXF, STEP, the viewer and the
   bundle carry part names, labels and the revision code, not your file paths,
