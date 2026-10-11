@@ -46,6 +46,10 @@ dish = function(a,i,p) let(w = smooth01(1 - abs(((a+180)%360)-180)/60),  // ±60
 rev_loft(concat(prof, [[0,30]]), n=120, mod=dish);               // r=0 end closes on axis
 ```
 
+## Models from elsewhere
+
+OpenSCAD can read any local file a model names (`include`, `use`, `import`, `surface`), and the result ends up in the STL or bundle the user may share. Before running a `.scad` the user did not write (downloaded, sent by someone), list those lines and check every path stays inside the project or a known library; ask before running one that reaches elsewhere (home folder, `/etc`, keys). Part ids must be plain names (letters, digits, `_ - .`); asm.py refuses anything else.
+
 ## BOSL2 (threads, fillets, gears — fetch on demand only)
 
 `bash scripts/get_bosl2.sh` once, then:
@@ -95,7 +99,7 @@ pick("base") base();
 - `--holes [GAP]` holes in sheets within GAP mm that overlap but miss (`off by N mm`). Bought-hardware patterns still need a looked-up source.
 - `--cut` flat sheets → `model_cut/<id>.dxf` + `cutlist.csv`. `--step` → `model_step/<id>.step` (CadQuery, auto-installed, ~35 s first time). OpenSCAD itself cannot write STEP.
 - `--bundle` (implies `--print` and `--html`) zips model + print files + cut + step + viewer as `model_<rev>.zip` and deletes older bundles of the model; every output carries the same 7-character `rev`; outputs from an older rev are left out and named. Tell the user to upload the bundle, never loose files.
-- `--html [--title T]` → `model.html`: coloured touch viewer — parts table (show / see-through), pull-apart, cut plane (X/Y/Z slider, flip), tap two points to measure, variant switcher. The assembly deliverable; present unviewed.
+- `--html [--title T]` → `model.html`: coloured touch viewer — parts table (show / see-through), pull-apart, cut plane (X/Y/Z slider, flip), tap two points to measure, variant switcher; move with two fingers or right/Shift-drag, zoom toward cursor or fingers, double-tap a part (or pick it and "Zoom to it") to inspect it up close, "Reset view" to come back. The assembly deliverable; present unviewed.
 - `--variant A,B` limit to some variants; outputs go to per-variant subfolders, lines are prefixed `[A]`.
 
 Exit code: 0 clean · 1 a part failed, is empty, not watertight or non-manifold · 2 something was found (overlap, check failure, travel collision). Read the printed lines either way.

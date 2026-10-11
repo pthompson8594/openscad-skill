@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>__TITLE__</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&display=swap">
 <style>
 :root{--bg:#dde3e9;--panel:#f3f5f7;--ink:#16202b;--muted:#536273;--line:#b7c1cc;--accent:#1b4fa8;--on-accent:#ffffff;--sel:#e3ebf8;
  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -12,7 +12,7 @@
 :root[data-theme="dark"]{--bg:#11161b;--panel:#1a2129;--ink:#e7ecf1;--muted:#9aa8b6;--line:#34414e;--accent:#8ab4ff;--on-accent:#0c1622;--sel:#243247}
 *,*::before,*::after{box-sizing:inherit}
 html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
-body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:Barlow,"Helvetica Neue",Arial,system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;display:flex;flex-direction:column;overflow:hidden}
 header{padding:10px 14px 6px}
 h1{font-size:17px;font-weight:600;margin:0;line-height:1.25}
 #info{font-size:14px;color:var(--muted);margin:2px 0 0;min-height:2.5em;line-height:1.25}
@@ -23,6 +23,7 @@ button{font:inherit;font-size:14px;font-weight:500;color:var(--ink);background:v
 button[aria-pressed="true"],button[aria-expanded="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #pbtn{position:absolute;top:8px;right:10px;z-index:3}
+#rview{position:absolute;top:8px;left:10px;z-index:3}
 #plist{position:absolute;top:54px;right:10px;z-index:2;width:min(300px,calc(100% - 20px));max-height:calc(100% - 118px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px}
 #plist[hidden]{display:none}
 table{border-collapse:collapse;width:100%;font-size:14px}
@@ -54,9 +55,10 @@ select{font:inherit;font-size:14px;color:var(--ink);background:var(--panel);bord
 <p id="info"></p>
 </header>
 <div id="stage">
+ <button id="rview">Reset view</button>
  <button id="pbtn" aria-expanded="false" aria-controls="plist">Parts</button>
  <div id="plist" hidden><table><thead><tr><th>Part</th><th>Show</th><th>See<br>through</th></tr></thead><tbody id="rows"></tbody></table></div>
- <div id="selbar" hidden><button id="sg" aria-pressed="false">See through</button><button id="sh">Hide</button></div>
+ <div id="selbar" hidden><button id="sf">Zoom to it</button><button id="sg" aria-pressed="false">See through</button><button id="sh">Hide</button></div>
 </div>
 <div id="panel">
  <div class="row" id="vrow" hidden>
@@ -66,7 +68,7 @@ select{font:inherit;font-size:14px;color:var(--ink);background:var(--panel);bord
  <div class="row">
   <label for="ex">Pull apart</label>
   <input id="ex" type="range" min="0" max="100" value="0">
-  <button id="rv">Reset</button>
+  <button id="rv">Reset all</button>
  </div>
  <div class="row">
   <label for="ca">Cut</label>
@@ -76,14 +78,15 @@ select{font:inherit;font-size:14px;color:var(--ink);background:var(--panel);bord
   <button id="ms" aria-pressed="false">Measure</button>
  </div>
 </div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>window.THREE||document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"><\/script>')</script>
-<script>window.THREE||document.write('<script src="https://unpkg.com/three@0.128.0/build/three.min.js"><\/script>')</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js" integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu" crossorigin="anonymous"></script>
+<script>window.THREE||document.write('<script src="https://unpkg.com/three@0.128.0/build/three.min.js" integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu" crossorigin="anonymous"><\/script>')</script>
 <script>
 const PARTS=__PARTS__;
 const $=id=>document.getElementById(id);
 const stage=$('stage'),info=$('info'),rows=$('rows'),plist=$('plist'),pbtn=$('pbtn'),selbar=$('selbar');
-const REV='__REV__',HINT='Drag to turn, pinch to zoom, tap a piece to name it.'+(REV?' Rev '+REV+'.':'');
+const FINE=window.matchMedia&&matchMedia('(pointer:fine)').matches;
+const REV='__REV__',HINT=(FINE?'Drag to turn, right-drag or Shift-drag to move, scroll to zoom, click a piece to name it, double-click to zoom to it.'
+ :'Drag to turn, two fingers to move and zoom, tap a piece to name it, double-tap to zoom to it.')+(REV?' Rev '+REV+'.':'');
 PARTS.forEach(p=>{p.shift=p.shift||[0,0,0];p.variant=p.variant||'';});
 const VARS=[...new Set(PARTS.map(p=>p.variant))];
 function stl(b64){const s=atob(b64),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);
@@ -92,7 +95,7 @@ function stl(b64){const s=atob(b64),u=new Uint8Array(s.length);for(let i=0;i<s.l
  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(p,3));g.computeVertexNormals();return g;}
 info.textContent=HINT;
 let ok=true,ren;
-if(!window.THREE){ok=false;info.textContent='The 3D library could not be downloaded (no internet connection?), so the model cannot be shown. Open this page again when online.';pbtn.hidden=true;}
+if(!window.THREE){ok=false;info.textContent='The 3D library could not be loaded (no internet connection, or the download failed its integrity check), so the model cannot be shown. Try again when online.';pbtn.hidden=true;}
 else try{ren=new THREE.WebGLRenderer({antialias:true});}catch(e){ok=false;info.textContent='This device could not start 3D graphics, so the model cannot be shown here.';pbtn.hidden=true;}
 if(ok){
 const scene=new THREE.Scene(),root=new THREE.Group();root.rotation.x=-Math.PI/2;scene.add(root);
@@ -139,7 +142,7 @@ function size(){const w=stage.clientWidth,h=stage.clientHeight;if(!w||!h)return;
 function explode(){PARTS.forEach(p=>p.mesh.position.set(p.shift[0]+p.ex[0]*k,p.shift[1]+p.ex[1]*k,p.shift[2]+p.ex[2]*k));}
 function theme(){scene.background=new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()||'#dde3e9');}
 const ex=$('ex');ex.oninput=()=>{k=ex.value/100;explode();};
-$('rv').onclick=()=>{tgt=C0.clone();th=1.95;ph=1.08;zoom=1;k=0;ex.value=0;explode();PARTS.forEach(p=>{p.on=true;p.glass=false;paint(p);});pickPart(null);
+$('rv').onclick=()=>{resetView();k=0;ex.value=0;explode();PARTS.forEach(p=>{p.on=true;p.glass=false;paint(p);});pickPart(null);
  $('ca').value='';cut();clearMeasure();measuring=false;$('ms').setAttribute('aria-pressed','false');if(VARS.length>1){$('vs').value='';showVar('');}};
 // --- cut plane (model coordinates; root turns model z up into world y) ---
 const AX={X:[new THREE.Vector3(1,0,0),0],Y:[new THREE.Vector3(0,0,-1),1],Z:[new THREE.Vector3(0,1,0),2]};
@@ -167,28 +170,55 @@ function measureHit(hit){if(mpts.length>=2)clearMeasure();
 // --- variants ---
 function showVar(v){PARTS.forEach(p=>{p.vis=!v||p.variant===v;paint(p);});
  const b=new THREE.Box3();PARTS.filter(p=>p.vis).forEach(p=>{p.mesh.geometry.computeBoundingBox();b.union(p.mesh.geometry.boundingBox.clone().translate(new THREE.Vector3(...p.shift)));});
- const c=b.getCenter(new THREE.Vector3());tgt=new THREE.Vector3(c.x,c.z,-c.y);R=b.getSize(new THREE.Vector3()).length()/2||100;zoom=1;size();}
+ const c=b.getCenter(new THREE.Vector3());tgt=new THREE.Vector3(c.x,c.z,-c.y);R=b.getSize(new THREE.Vector3()).length()/2||100;zoom=1;home={tgt:tgt.clone(),R:R};size();}
 if(VARS.length>1){$('vrow').hidden=false;const vs=$('vs');const o=document.createElement('option');o.value='';o.textContent='All, side by side';vs.appendChild(o);
  VARS.forEach(v=>{const q=document.createElement('option');q.value=v;q.textContent=v;vs.appendChild(q);});vs.onchange=()=>showVar(vs.value);}
-const cv=ren.domElement,pts=new Map();let moved=0,pd=0,pm=null;
+const cv=ren.domElement,pts=new Map();let moved=0,pd=0,pm=null,panning=false,anim=null,lastTap={t:0,p:null};
+let home={tgt:C0.clone(),R:R};
+const ZMIN=(()=>{let m=Infinity;PARTS.forEach(p=>{p.mesh.geometry.computeBoundingSphere();m=Math.min(m,p.mesh.geometry.boundingSphere.radius);});
+ return Math.max(0.0005,Math.min(0.2,(isFinite(m)?m:R)/R*0.25));})();
+const clampZ=z=>Math.min(4,Math.max(ZMIN,z));
+function radius(){return fit*zoom*(1+0.5*k);}
+function px(){return 2*radius()*Math.tan(cam.fov*Math.PI/360)/Math.max(1,cv.clientHeight);}
+function pan(dx,dy){cam.updateMatrixWorld();const s=px(),r=new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld,0),u=new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld,1);
+ tgt.addScaledVector(r,-dx*s).addScaledVector(u,dy*s);anim=null;}
+function resetView(){anim=null;tgt=home.tgt.clone();R=home.R;th=1.95;ph=1.08;zoom=1;size();}
+function focusPart(p){if(!p)return;const b=new THREE.Box3().setFromObject(p.mesh);if(b.isEmpty())return;
+ const c=b.getCenter(new THREE.Vector3()),r=b.getSize(new THREE.Vector3()).length()/2||1;
+ anim={t0:performance.now(),a:tgt.clone(),b:c,z0:zoom,z1:clampZ(r/R*1.2)};}
+$('rview').onclick=resetView;
+$('sf').onclick=()=>focusPart(sel);
 function mid(){const a=[...pts.values()];return {x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2,d:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)};}
-cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);pts.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pts.size===1)moved=0;if(pts.size===2){pm=mid();pd=pm.d;}});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(pts.size===1){moved=0;panning=e.pointerType==='mouse'&&(e.button===1||e.button===2||e.shiftKey||e.ctrlKey||e.metaKey);}
+ if(pts.size===2){pm=mid();pd=pm.d;}});
 cv.addEventListener('pointermove',e=>{const p=pts.get(e.pointerId);if(!p)return;const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;
- if(pts.size===1){moved+=Math.abs(dx)+Math.abs(dy);th+=dx*0.008;ph=Math.min(3.0,Math.max(0.12,ph-dy*0.008));}
- else if(pts.size===2){const m=mid();if(pd>0&&m.d>0)zoom=Math.min(4,Math.max(0.2,zoom*pd/m.d));pd=m.d;
-  const s=fit*zoom*0.0016,r=new THREE.Vector3().crossVectors(cam.up,dirv()).normalize();tgt.addScaledVector(r,-(m.x-pm.x)*s);tgt.y+=(m.y-pm.y)*s;pm=m;moved+=9;}});
-cv.addEventListener('pointerup',e=>{const had=pts.size;pts.delete(e.pointerId);if(had===1&&moved<8)tap(e);});
-cv.addEventListener('pointercancel',e=>pts.delete(e.pointerId));
-cv.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.min(4,Math.max(0.2,zoom*(e.deltaY>0?1.1:0.9)));},{passive:false});
+ if(pts.size===1){moved+=Math.abs(dx)+Math.abs(dy);if(panning)pan(dx,dy);else{th+=dx*0.008;ph=Math.min(3.0,Math.max(0.12,ph-dy*0.008));}}
+ else if(pts.size===2){const m=mid();pan(m.x-pm.x,m.y-pm.y);if(pd>0&&m.d>0)zoomAt({clientX:m.x,clientY:m.y},zoom*pd/m.d);pd=m.d;pm=m;moved+=9;}});
+cv.addEventListener('pointerup',e=>{const had=pts.size,wasPan=panning;pts.delete(e.pointerId);if(!pts.size)panning=false;if(had===1&&moved<8&&!wasPan)tap(e);});
+cv.addEventListener('pointercancel',e=>{pts.delete(e.pointerId);if(!pts.size)panning=false;});
+function rayAt(e){const r=cv.getBoundingClientRect();ray.setFromCamera(new THREE.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),cam);}
+function zoomAt(e,z){anim=null;const z0=zoom;zoom=clampZ(z);const f=1-zoom/z0;if(!f)return;rayAt(e);
+ const hit=ray.intersectObjects(PARTS.filter(p=>p.on&&p.vis!==false&&!p.glass).map(p=>p.mesh),false).filter(h=>!CLIPS.length||clip.distanceToPoint(h.point)>=0)[0];
+ let q=hit?hit.point:null;if(!q){q=new THREE.Vector3();if(!ray.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(dirv(),tgt),q))return;}
+ tgt.lerp(q,f);}
+cv.addEventListener('wheel',e=>{e.preventDefault();zoomAt(e,zoom*Math.pow(1.0015,e.deltaMode?e.deltaY*33:e.deltaY));},{passive:false});
 const ray=new THREE.Raycaster();
-function tap(e){const r=cv.getBoundingClientRect();ray.setFromCamera(new THREE.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),cam);
+function tap(e){rayAt(e);
  const hits=ray.intersectObjects(PARTS.filter(p=>p.on&&p.vis!==false&&!p.glass).flatMap(p=>[p.mesh,p.back]),false).filter(h=>!CLIPS.length||clip.distanceToPoint(h.point)>=0);
- const hit=hits[0];if(measuring){if(hit)measureHit(hit);return;}pickPart(hit?hit.object.userData:null);}
+ const hit=hits[0];if(measuring){if(hit)measureHit(hit);return;}
+ const part=hit?hit.object.userData:null,now=performance.now();
+ if(part&&lastTap.p===part&&now-lastTap.t<400){focusPart(part);lastTap={t:0,p:null};return;}
+ lastTap={t:now,p:part};pickPart(part);}
 addEventListener('resize',size);if(window.ResizeObserver)new ResizeObserver(size).observe(stage);
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',theme);
 new MutationObserver(theme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 size();explode();theme();if(stage.clientWidth>=720)openList(true);
-(function loop(){requestAnimationFrame(loop);const rad=fit*zoom*(1+0.5*k);cam.position.copy(tgt).addScaledVector(dirv(),rad);cam.lookAt(tgt);ren.render(scene,cam);})();
+(function loop(){requestAnimationFrame(loop);
+ if(anim){const t=Math.min(1,(performance.now()-anim.t0)/350),e=t*(2-t);tgt.lerpVectors(anim.a,anim.b,e);zoom=anim.z0+(anim.z1-anim.z0)*e;if(t>=1)anim=null;}
+ const rad=radius();cam.near=Math.max(rad*0.005,1e-4);cam.far=rad*50+R*20;cam.updateProjectionMatrix();
+ cam.position.copy(tgt).addScaledVector(dirv(),rad);cam.lookAt(tgt);ren.render(scene,cam);})();
 }
 </script>
 </body>

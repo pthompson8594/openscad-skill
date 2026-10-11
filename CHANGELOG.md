@@ -13,6 +13,24 @@
   reported as mid-air.
 - **Quantities.** `qty=3` marks a part to make three times, in the print list, manifests,
   cut list and viewer.
+- **Viewer: inspect small parts.** On a computer, right-drag or Shift-drag moves the
+  model, and the wheel zooms toward the cursor. Pinch zooms toward the fingers.
+  Double-click or double-tap a part, or pick it in the list and press "Zoom to it", to
+  frame it and rotate around it. The zoom range now reaches the smallest part, and an
+  always-visible "Reset view" button restores the full view.
+- **Security review.**
+  - Part ids are restricted to plain names, so a model can't make the scripts write
+    outside their folders.
+  - Labels are escaped in the viewer, so a label can't run script there, and colours
+    are validated.
+  - three.js is pinned with an integrity hash, the viewer has a content security
+    policy, and Google Fonts was removed.
+  - The fast engine is installed without install scripts and checked against a pinned
+    hash.
+  - The workflow has read-only permissions except in the release step, and its actions
+    are pinned to commits.
+  - Temp files are cleaned up.
+  - SKILL.md and the README now cover models from untrusted sources.
 - **Automatic test and release.** GitHub Actions runs the self-test on every push. Running
   the "Test and release" workflow publishes the top CHANGELOG version, with the skill
   file attached.

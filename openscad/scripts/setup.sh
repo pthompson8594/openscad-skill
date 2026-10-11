@@ -12,6 +12,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WASM_DIR="${OPENSCAD_WASM_DIR:-$HOME/.cache/openscad-skill/wasm}"
 WASM_PKG="openscad-wasm-prebuilt@1.2.0"
+WASM_SHA512="sha512-JfXJlopHVHvsYiVYUKYDXkg8yOkABm8zclo8zPrSRBeeICR+fitesO6NRwBdAzSdbtOYh6Scmuz/XLyhllbzYA=="   # npm dist.integrity of 1.2.0
 
 have_native() { command -v openscad >/dev/null 2>&1; }
 native_manifold() { have_native && openscad --help 2>&1 | grep -qiE -- "--backend|manifold"; }
@@ -21,6 +22,8 @@ as_root() {  # run a command string as root if we can; else return 4
   elif sudo -n true 2>/dev/null; then sudo bash -c "$1"
   else return 4; fi
 }
+
+SETUP_LOG="$(mktemp)"
 
 # --- 1. native package (for PNGs; also the fallback engine) --------------------
 SUDO_MSG=""
@@ -35,13 +38,13 @@ if ! have_native; then
   fi
   if [[ -n "$INST" ]]; then
     echo ">> $INST"
-    as_root "$INST" >/tmp/openscad-setup.log 2>&1; rc=$?
+    as_root "$INST" >"$SETUP_LOG" 2>&1; rc=$?
     if [[ $rc -ne 0 && $rc -ne 4 ]]; then
       echo ">> install failed; refreshing the package index and retrying ($UPD)"
-      as_root "$UPD && $INST" >>/tmp/openscad-setup.log 2>&1; rc=$?
+      as_root "$UPD && $INST" >>"$SETUP_LOG" 2>&1; rc=$?
     fi
     if [[ $rc -eq 4 ]]; then SUDO_MSG="sudo sh -c '$UPD && $INST'"
-    elif [[ $rc -ne 0 ]]; then echo ">> native OpenSCAD did not install (see /tmp/openscad-setup.log)"; fi
+    elif [[ $rc -ne 0 ]]; then echo ">> native OpenSCAD did not install (see $SETUP_LOG)"; fi
   fi
 fi
 
@@ -53,8 +56,16 @@ if ! native_manifold; then
        && [[ "$(node -p 'process.versions.node.split(".")[0]')" -ge 18 ]]; then
     echo ">> npm install $WASM_PKG -> $WASM_DIR (OpenSCAD 2025 + Manifold, ~11 MB)"
     mkdir -p "$WASM_DIR" && [[ -f "$WASM_DIR/package.json" ]] || echo '{"name":"openscad-skill-wasm","private":true}' > "$WASM_DIR/package.json"
-    npm install --prefix "$WASM_DIR" --no-audit --no-fund --silent "$WASM_PKG" >/tmp/openscad-wasm.log 2>&1 \
-      || echo ">> npm install failed (see /tmp/openscad-wasm.log); falling back to native OpenSCAD"
+    LOG="$(mktemp)"
+    if npm install --prefix "$WASM_DIR" --ignore-scripts --no-audit --no-fund --silent "$WASM_PKG" >"$LOG" 2>&1; then
+      GOT="$(node -e 'const l=require(process.argv[1]);const p=(l.packages||{})["node_modules/openscad-wasm-prebuilt"]||{};process.stdout.write(p.integrity||"")' "$WASM_DIR/package-lock.json" 2>/dev/null)"
+      if [[ "$GOT" != "$WASM_SHA512" ]]; then
+        echo ">> fast engine failed its integrity check (got '${GOT:-none}'); removed it, using native OpenSCAD"
+        rm -rf "$WASM_DIR/node_modules"
+      fi
+    else
+      echo ">> npm install failed (see $LOG); falling back to native OpenSCAD"
+    fi
   else
     echo ">> node 18+ / npm not found: skipping the fast engine (big booleans will be slow on 2021.01)"
   fi

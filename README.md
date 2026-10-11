@@ -176,6 +176,31 @@ checks then pass.
 - Tested on Linux with OpenSCAD 2021.01 and the 2025.01 WebAssembly build.
   The self-test passes on both.
 
+## Security and privacy
+
+- **No telemetry.** The scripts make no network requests of their own. The only
+  downloads are package installs on first run (see above) and, when you open a
+  viewer page, three.js 0.128.0 from jsDelivr (unpkg as fallback). The page
+  pins three.js with an integrity hash, so a tampered copy is refused, and its
+  content security policy blocks any other request. No fonts or trackers load.
+- **Pinned engine.** `setup.sh` installs `openscad-wasm-prebuilt@1.2.0` without
+  running install scripts, checks its hash against the one in the script, and
+  removes it if they differ.
+- **Nothing personal in outputs.** STL, 3MF, DXF, STEP, the viewer and the
+  bundle carry part names, labels and the revision code, not your file paths,
+  user name or machine details.
+- **Untrusted models.** An OpenSCAD file can read any local file it names
+  (`import`, `include`, `surface`) into its geometry. Only run models you
+  trust, or check those lines first. The skill tells Claude to do this. Part
+  ids are restricted to plain names, so a model cannot make the scripts write
+  outside its own folders, and labels are escaped in the viewer.
+- **Releases** are built by GitHub Actions from the tagged commit. The workflow
+  has write access only in the release step, runs only from `main`, and pins
+  every action to a commit.
+
+To report a security problem, open an issue or use GitHub's private
+vulnerability reporting on this repository.
+
 ## Releasing
 
 Every push runs the self-test on GitHub (the badge at the top). To publish, add a

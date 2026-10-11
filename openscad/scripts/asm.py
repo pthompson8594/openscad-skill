@@ -212,10 +212,17 @@ def evaluate(scad, defs, cachedir):
     return t
 
 
+ID_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+COLOR_OK = re.compile(r"^#[0-9A-Fa-f]{3,8}$")
+
+
 def parse_parts(rows):
-    out = []
+    out, bad = [], []
     for r in rows:
         r = [r] if isinstance(r, str) else r
+        if not r or not isinstance(r[0], str) or not ID_OK.match(r[0]) or ".." in r[0]:
+            bad.append(repr(r[0] if r else r))
+            continue
         p = {"id": r[0], "label": r[0].replace("hw_", "").replace("_", " ").capitalize(), "note": "", "ex": None, "color": None, "tags": {}}
         strs = []
         for x in r[1:]:
@@ -224,7 +231,7 @@ def parse_parts(rows):
                 if m:
                     p["tags"][m.group(1)] = m.group(2).strip()
                 elif x.startswith("#"):
-                    p["color"] = x
+                    p["color"] = x if COLOR_OK.match(x) else None
                 else:
                     strs.append(x)
             elif isinstance(x, list):
@@ -234,6 +241,7 @@ def parse_parts(rows):
         if len(strs) > 1:
             p["note"] = strs[1]
         p["hw"] = p["id"].startswith("hw_")
+        p["label"], p["note"] = p["label"][:120], p["note"][:300]
         p["group"] = p["tags"].get("group", p["id"])
         fx = p["tags"].get("flex", "")
         p["flex_all"] = fx.lower() in ("1", "true", "yes", "all")
@@ -243,6 +251,8 @@ def parse_parts(rows):
         except ValueError:
             p["qty"] = 1
         out.append(p)
+    if bad:
+        sys.exit("asm.py: part ids must be letters, digits, '_', '-' or '.', start with a letter or digit, and be at most 64 characters (they become file names): " + ", ".join(bad))
     return out
 
 
@@ -342,6 +352,8 @@ def export(scad, parts, outdir, defs, model_warn=()):
         if (r.returncode or not os.path.exists(f)) and native:
             r = run_scad(["-o", f] + da + [scad])
         if r.returncode or not os.path.exists(f):
+            if os.path.exists(f):
+                os.remove(f)
             return None
         txt = open(f, errors="replace").read()
         os.remove(f)
@@ -1420,7 +1432,9 @@ def html(sets, path, title, rev=""):
                          "b64": base64.b64encode(open(p["stl"], "rb").read()).decode()})
         xoff += (hi[0] - lo[0]) * 1.25 + 10
     tpl = open(os.path.join(HERE, "view3d.html")).read()
-    open(path, "w").write(tpl.replace("__TITLE__", xml_esc(title)).replace("__REV__", rev).replace("__PARTS__", json.dumps(data)))
+    js = json.dumps(data).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+    vals = {"__TITLE__": xml_esc(title), "__REV__": re.sub(r"[^0-9a-f]", "", rev), "__PARTS__": js}
+    open(path, "w").write(re.sub(r"__TITLE__|__REV__|__PARTS__", lambda m: vals[m.group(0)], tpl))
     say("html: %s (%d kB) - interactive, for the human; present unviewed" % (path, os.path.getsize(path) // 1024))
 
 
@@ -1542,10 +1556,27 @@ pick("l") translate([20,0,4.02]) cube([5,5,1]);
     res.append(("flex=k: spring may touch the knob, not the wall", "1 flex contacts allowed" in o6 and "OVERLAP s x w" in o6 and "s x k" not in o6 and "k x s" not in o6))
     res.append(("travel: several named rows per group", "travel push: 2 poses" in o6 and "travel lift: 2 poses" in o6))
     res.append(("print: a liner resting 0.02 mm above its body is supported; qty shown", "resting on nothing" not in o6 and "pl.3mf" in o6))
+    f4 = os.path.join(d, "atk.scad")
+    open(f4, "w").write('part="all";\nparts=[ ["a","</script><script>document.title=1</script>","","#f00;x:url(//e)"], ["../x","X"] ];\nmodule pick(n){ if(part=="all"||part==n) children(); }\npick("a") cube(1);\n')
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            main([f4, "--html"])
+        msg = ""
+    except SystemExit as e:
+        msg = str(e)
+    res.append(("a part id with ../ is refused before anything is written", "part ids must be" in msg and not os.path.exists(os.path.join(d, "x.stl"))))
+    open(f4, "w").write('part="all";\nparts=[ ["a","</script><script>document.title=1</script>","","#f00;x:url(//e)"] ];\nmodule pick(n){ if(part=="all"||part==n) children(); }\npick("a") cube(1);\n')
+    with contextlib.redirect_stdout(io.StringIO()):
+        main([f4, "--html"])
+    page = open(os.path.join(d, "atk.html")).read()
+    res.append(("viewer: a label cannot close the script tag; a bad colour is dropped", "</script><script>document" not in page and "\\u003c/script\\u003e" in page and "url(//e)" not in page))
     for name, good in res:
         print(("PASS " if good else "FAIL ") + name)
     allok = all(g for _, g in res)
     print("selftest: " + ("PASS" if allok else "FAIL (outputs in %s)" % d))
+    if allok:
+        import shutil
+        shutil.rmtree(d, ignore_errors=True)
     if not allok:
         print(out + out2 + out3 + out4)
     return allok

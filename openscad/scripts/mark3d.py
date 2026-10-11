@@ -2,7 +2,7 @@
 """mark3d.py model.stl [mark.stl] out.html
 Self-contained interactive viewer. No mark: solid model, orbit/zoom/pan + ghost
 toggle. With mark: model translucent gray, mark solid red, focus-mark button.
-Binary STLs embedded base64; three.js via cdnjs; hand-rolled controls.
+Binary STLs embedded base64; three.js from jsDelivr/unpkg, integrity-pinned; hand-rolled controls.
 """
 import base64, struct, sys
 
@@ -30,7 +30,8 @@ html = """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport"
 #hud{position:fixed;top:10px;left:10px;color:#ddd;font-size:13px}
 button{background:#444;color:#eee;border:1px solid #666;border-radius:4px;padding:4px 10px;margin-right:6px;cursor:pointer}
 button:hover{background:#555}</style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js" integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu" crossorigin="anonymous"></script>
+<script>window.THREE||document.write('<script src="https://unpkg.com/three@0.128.0/build/three.min.js" integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu" crossorigin="anonymous"><\/script>')</script>
 </head><body><div id="hud">
 <button onclick="focusAll()">whole part</button>__MARKBTN__
 <button onclick="ghost=!ghost;mat.opacity=ghost?0.28:0.95;mat.transparent=ghost;mat.depthWrite=!ghost">toggle ghost</button>
