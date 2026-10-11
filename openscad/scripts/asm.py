@@ -31,6 +31,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OSCAD = os.path.join(HERE, "oscad.sh")
 
 
+PINS = {"numpy": "numpy>=1.24,<3", "manifold3d": "manifold3d>=3.0,<4", "scipy": "scipy>=1.10,<2", "pillow": "pillow>=10.1,<13", "cadquery": "cadquery>=2.4,<3"}
+
+
 def need(mod, pipname=None):
     """import a module, installing it with pip if missing (system, then per-user)"""
     try:
@@ -40,7 +43,7 @@ def need(mod, pipname=None):
     import importlib, site
     err = ""
     for extra in ([], ["--user"], ["--break-system-packages"], ["--user", "--break-system-packages"]):
-        r = subprocess.run([sys.executable, "-m", "pip", "install", "-q", pipname or mod] + extra, capture_output=True, text=True)
+        r = subprocess.run([sys.executable, "-m", "pip", "install", "-q", PINS.get(pipname or mod, pipname or mod)] + extra, capture_output=True, text=True, cwd=os.path.dirname(os.path.abspath(__file__)))
         if r.returncode == 0:
             break
         err = (r.stderr.strip().splitlines() or [""])[-1]
@@ -80,8 +83,14 @@ def scad_env(native=False):
     return e
 
 
+TIMEOUT = int(os.environ.get("OSCAD_TIMEOUT", "900"))
+
+
 def run_scad(args, native=False):
-    return subprocess.run(["bash", OSCAD] + args, capture_output=True, text=True, env=scad_env(native))
+    try:
+        return subprocess.run(["bash", OSCAD] + args, capture_output=True, text=True, env=scad_env(native), timeout=TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(args, 124, "", "ERROR: OpenSCAD took longer than %d s and was stopped (set OSCAD_TIMEOUT to allow more)" % TIMEOUT)
 
 
 _ENG = {}
@@ -98,7 +107,7 @@ def engine():
 def defargs(defs):
     out = []
     for k, v in defs:
-        out += ["-D", "%s=%s" % (k, json.dumps(v) if isinstance(v, str) else v)]
+        out += ["-D", "%s=%s" % (k, json.dumps(v) if isinstance(v, (str, bool, list)) or v is None else repr(v))]
     return out
 
 
@@ -125,6 +134,8 @@ def deps(scad, seen=None):
     t = open(p, errors="replace").read()
     t = re.sub(r"/\*.*?\*/", "", t, flags=re.S)
     t = re.sub(r"//[^\n]*", "", t)
+    lits = re.findall(r'\b(?:import|surface)\s*\(\s*(?:file\s*=\s*)?"([^"]+)"', t)
+    t = re.sub(r'"(?:\\.|[^"\\])*"', '""', t)
     d = os.path.dirname(p)
     libs = [d] + [x for x in scad_env()["OPENSCADPATH"].split(os.pathsep) if x] + USERLIBS
     for name in re.findall(r"\b(?:include|use)\s*<([^>]+)>", t):
@@ -133,7 +144,7 @@ def deps(scad, seen=None):
             if os.path.isfile(q):
                 deps(q, seen)
                 break
-    for name in re.findall(r"\b(?:import|surface)\s*\(\s*(?:file\s*=\s*)?\"([^\"]+)\"", t):
+    for name in lits:
         q = os.path.join(d, name)
         if os.path.isfile(q):
             seen.add(os.path.abspath(q))
@@ -172,12 +183,19 @@ def evaluate(scad, defs, cachedir):
         if c.get("key") == key and c["t"].get("parts"):
             return c["t"]
     d = os.path.dirname(os.path.abspath(scad))
+    if re.search(r"[<>\n\r]", os.path.basename(scad)):
+        sys.exit("asm.py: rename the model file - its name may not contain < > or line breaks")
     w = os.path.join(d, ".asm_eval_%d.scad" % os.getpid())
     e = w[:-5] + ".echo"
-    open(w, "w").write("include <%s>\n" % os.path.basename(scad) + "".join(
-        'echo(ASM_%s=is_undef(%s)?"__undef__":%s);\n' % (n, n, n) for n in TABLES))
-    r = run_scad(["-o", e] + defargs([("part", "__none__")] + defs) + [w])
-    txt = (open(e).read() if os.path.exists(e) else "") + "\n" + r.stdout + "\n" + r.stderr
+    try:
+        open(w, "w").write("include <%s>\n" % os.path.basename(scad) + "".join(
+            'echo(ASM_%s=is_undef(%s)?"__undef__":%s);\n' % (n, n, n) for n in TABLES))
+        r = run_scad(["-o", e] + defargs([("part", "__none__")] + defs) + [w])
+        txt = (open(e).read() if os.path.exists(e) else "") + "\n" + r.stdout + "\n" + r.stderr
+    finally:
+        for f in (w, e):
+            if os.path.exists(f):
+                os.remove(f)
     clash_ = []
     for name, l1, l2, l3 in re.findall(r"WARNING: [\"']?(\w+)[\"']? was assigned on line (\d+)(?: of [\"'][^\"'\n]*[\"'])? but was overwritten(?: on line (\d+)| in file [^\n]*?, line (\d+))?", txt):
         if name in TABLES:
@@ -186,9 +204,6 @@ def evaluate(scad, defs, cachedir):
                 name, l1, " and %s" % l2 if l2 else "", name))
     if clash_:
         sys.exit("asm.py: name clash - rename your own variable:\n  " + "\n  ".join(clash_))
-    for f in (w, e):
-        if os.path.exists(f):
-            os.remove(f)
     t = {}
     for n in TABLES:
         m = re.search(r"ECHO: ASM_%s = (.*)" % n, txt)
@@ -203,6 +218,8 @@ def evaluate(scad, defs, cachedir):
         errs = [l for l in txt.splitlines() if l.startswith("ERROR") or l.startswith("WARNING: Can't open")]
         if errs:
             sys.exit("asm.py: model failed to evaluate:\n" + "\n".join(errs[:5]))
+        if "ECHO: ASM_parts" in txt:
+            sys.exit("asm.py: the parts table could not be read - keep ids, labels and notes to plain text (no quotes, backslashes or line breaks)")
         sys.exit("asm.py: no `parts = [ ... ];` table found")
     if not t["parts"]:
         sys.exit("asm.py: the parts table is empty")
@@ -438,7 +455,7 @@ def report(parts, outdir, show_all, rendered):
     same = 0
     for p in parts:
         for w in p.get("warn") or []:
-            say("%s: %s" % (p["id"], w))
+            say("%s says: %s" % (p["id"], w))
         if p.get("tri") is None:
             say("%s: EMPTY or failed (%s)" % (p["id"], p.get("err") or "no geometry"))
             FAULTS["render"] += 1
@@ -997,7 +1014,16 @@ def xml_esc(s):
 
 
 def safe(s):
-    return re.sub(r"[^A-Za-z0-9._-]+", "_", s).strip("_") or "part"
+    s = re.sub(r"[^A-Za-z0-9._-]+", "_", str(s)).strip("_.")
+    return s[:80] or "part"
+
+
+def inside(path, root):
+    """refuse to write or delete anywhere but under the model's folder"""
+    rp, rr = os.path.realpath(path), os.path.realpath(root)
+    if rp != rr and not rp.startswith(rr + os.sep):
+        sys.exit("asm.py: refusing to use %s - it is outside the model folder" % path)
+    return path
 
 
 def float_note(fn, tris):
@@ -1051,9 +1077,12 @@ def drop_pieces(fn, tri):
 
 
 def print_set(parts, outdir, rev, scad, colors):
+    inside(outdir, os.path.dirname(os.path.abspath(scad)))
     if os.path.isdir(outdir):
         for f in os.listdir(outdir):
-            os.remove(os.path.join(outdir, f))
+            q = os.path.join(outdir, f)
+            if os.path.isfile(q) and not os.path.islink(q) and (f == "MANIFEST.txt" or f.endswith((".stl", ".3mf"))):
+                os.remove(q)
     os.makedirs(outdir, exist_ok=True)
     pr = [p for p in parts if not p["hw"] and p.get("tri") is not None]
     plates, singles = {}, []
@@ -1570,6 +1599,45 @@ pick("l") translate([20,0,4.02]) cube([5,5,1]);
         main([f4, "--html"])
     page = open(os.path.join(d, "atk.html")).read()
     res.append(("viewer: a label cannot close the script tag; a bad colour is dropped", "</script><script>document" not in page and "\\u003c/script\\u003e" in page and "url(//e)" not in page))
+    sd = os.path.join(d, "sec")
+    os.makedirs(sd)
+    open(os.path.join(sd, "keep.txt"), "w").write("mine")
+    f5 = os.path.join(sd, "v.scad")
+    open(f5, "w").write('variants=[".."]; variant=".."; part="all";\nparts=[["a","A"]];\nmodule pick(n){ if(part=="all"||part==n) children(); }\npick("a") cube(2);\n')
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            main([f5, "--print"])
+        msg = ""
+    except SystemExit as e:
+        msg = str(e)
+    res.append(("a variant named '..' is refused; nothing next to the model is touched", "variants must be plain names" in msg and os.path.exists(os.path.join(sd, "keep.txt")) and not os.path.exists(os.path.join(sd, "a.stl"))))
+    secret = os.path.join(d, "secret.txt")
+    open(secret, "w").write("PRIVATE-KEY-MATERIAL")
+    os.symlink(secret, os.path.join(sd, "notes.scad"))
+    open(f5, "w").write('doc = "see include <notes.scad>"; part="all";\nparts=[["a","A"]];\nmodule pick(n){ if(part=="all"||part==n) children(); }\npick("a") cube(2);\n')
+    with contextlib.redirect_stdout(io.StringIO()):
+        main([f5, "--bundle"])
+    zips = [x for x in os.listdir(sd) if x.endswith(".zip")]
+    leaked = any(b"PRIVATE-KEY-MATERIAL" in zipfile.ZipFile(os.path.join(sd, z)).read(n) for z in zips for n in zipfile.ZipFile(os.path.join(sd, z)).namelist())
+    res.append(("bundle never includes a symlinked or string-only 'include'", bool(zips) and not leaked))
+    marker = os.path.join(d, "planted_ran")
+    open(os.path.join(sd, "struct.py"), "w").write("open(%r,'w').write('x')\n" % marker)
+    open(os.path.join(sd, "re.py"), "w").write("open(%r,'w').write('x')\n" % marker)
+    open(os.path.join(sd, "c.scad"), "w").write("cube(3);\n")
+    subprocess.run(["bash", os.path.join(HERE, "render.sh"), "c.scad", "--no-png", "--cut", "z"], cwd=sd, capture_output=True, text=True, env=scad_env())
+    res.append(("render.sh never imports Python files planted next to a model", not os.path.exists(marker)))
+    global TIMEOUT
+    old, TIMEOUT = TIMEOUT, 3
+    f6 = os.path.join(sd, "slow.scad")
+    open(f6, "w").write('n = len([for(i=[0:30000]) for(j=[0:30000]) if(i<0) i]);\npart="all"; parts=[["a"]];\nmodule pick(x){ if(part=="all"||part==x) children(); }\npick("a") cube(1);\n')
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            main([f6])
+        msg = ""
+    except SystemExit as e:
+        msg = str(e)
+    TIMEOUT = old
+    res.append(("a model that never finishes is stopped and leaves no temp files", "longer than 3 s" in msg and not [x for x in os.listdir(sd) if x.startswith(".asm_eval")]))
     for name, good in res:
         print(("PASS " if good else "FAIL ") + name)
     allok = all(g for _, g in res)
@@ -1620,6 +1688,8 @@ def main(argv=None):
     base = os.path.splitext(a.scad)[0]
     t0 = evaluate(a.scad, [], base + "_parts")
     vs = t0.get("variants") or [None]
+    if t0.get("variants") and not all((isinstance(v, str) and ID_OK.match(v) and ".." not in v) or (isinstance(v, (int, float)) and not isinstance(v, bool)) for v in vs):
+        sys.exit("asm.py: variants must be plain names (letters, digits, _ - .) or numbers: %s" % t0.get("variants"))
     if t0.get("variants") and t0.get("variant") is None:
         say("variants: the model has a `variants` table but no `variant` variable, so every set would be identical - using one set")
         vs = [None]
@@ -1636,12 +1706,12 @@ def main(argv=None):
         parts = parse_parts(t["parts"])
         if a.only:
             parts = [p for p in parts if p["id"] in a.only.split(",")]
-        outdir = base + "_parts" + sub
+        outdir = inside(base + "_parts" + sub, os.path.dirname(os.path.abspath(a.scad)))
         kf = t.get("k_factor") if isinstance(t.get("k_factor"), (int, float)) else 0.4
         for p in parts:
             p["bends"], p["kf"] = [b for b in (t.get("bends") or []) if b and b[0] == p["id"]], kf
         for w_ in t.get("_warn") or []:
-            say("model: " + w_)
+            say("model says: " + w_)
         n = load(a.scad, parts, outdir, defs, t.get("_warn") or [])
         report(parts, outdir, a.all, n)
         dims_report(t.get("report"), outdir)
@@ -1690,9 +1760,14 @@ def main(argv=None):
             os.remove(os.path.join(root, f))
         got = set()
         with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
+            rroot = os.path.realpath(root)
             for f in sorted(deps(a.scad)):
-                if f.startswith(root + os.sep) and f.endswith(".scad"):
-                    zf.write(f, os.path.relpath(f, root))
+                if not f.endswith(".scad") or not f.startswith(root + os.sep):
+                    continue
+                if os.path.islink(f) or not os.path.realpath(f).startswith(rroot + os.sep):
+                    say("bundle: left out %s - it is a link to a file outside the model folder" % os.path.relpath(f, root))
+                    continue
+                zf.write(f, os.path.relpath(f, root))
             stale = []
             for d in (base + "_print", base + "_cut", base + "_step"):
                 for dp, _, fns in os.walk(d):
@@ -1704,7 +1779,10 @@ def main(argv=None):
                         continue
                     got.add(os.path.basename(d).rsplit("_", 1)[-1])
                     for fn in sorted(fns):
-                        zf.write(os.path.join(dp, fn), os.path.relpath(os.path.join(dp, fn), root))
+                        q = os.path.join(dp, fn)
+                        if os.path.islink(q) or not os.path.isfile(q):
+                            continue
+                        zf.write(q, os.path.relpath(q, root))
             zf.write(base + ".html", os.path.basename(base) + ".html")
         say("bundle: %s (model + %s + viewer, all rev %s; hardware left out)" % (z, " + ".join({"print": "print files", "cut": "cut files", "step": "STEP files"}[k] for k in ("print", "cut", "step") if k in got) or "no fabrication files", rev))
         if old:

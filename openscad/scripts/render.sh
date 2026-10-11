@@ -25,6 +25,11 @@
 
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# Python always runs from the skill's own folder, so modules planted next to a model
+# (struct.py, re.py ...) are never imported; every path handed to it is absolute.
+py() { (cd "$HERE" && python3 "$@"); }
+absp() { echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"; }
+TMO=(); command -v timeout >/dev/null 2>&1 && TMO=(timeout "${OSCAD_TIMEOUT:-900}")
 export OPENSCADPATH="$(dirname "$HERE")/lib${OPENSCADPATH:+:$OPENSCADPATH}"
 
 MODEL=""; SIZE="320,320"; VIEW="iso"; DO_STL=1; CUT=""; CUT3D=""; EXPLODE=""; DIFF=""; OUTBASE=""
@@ -56,9 +61,11 @@ done
 if [[ -z "$MODEL" || ! -f "$MODEL" ]]; then
   echo "error: pass a path to a .scad file" >&2; exit 2
 fi
+MODEL="$(absp "$MODEL")"
+for v in MARK MARK3D DIFF; do [[ -n "${!v:-}" && -f "${!v}" ]] && printf -v "$v" '%s' "$(absp "${!v}")"; done
 
 if [[ -n "$CUT" ]]; then
-  python3 -c "import re,sys; s=sys.argv[1].split(','); ok=re.fullmatch(r'[xyz](=-?[0-9.]+)?',s[0].strip()) and all(re.fullmatch(r'r[xyz]=-?[0-9.]+',x.strip()) for x in s[1:]); sys.exit(0 if ok else 1)" "$CUT" \
+  py -c "import re,sys; s=sys.argv[1].split(','); ok=re.fullmatch(r'[xyz](=-?[0-9.]+)?',s[0].strip()) and all(re.fullmatch(r'r[xyz]=-?[0-9.]+',x.strip()) for x in s[1:]); sys.exit(0 if ok else 1)" "$CUT" \
     || { echo "error: bad --cut plane '$CUT' (use x, y=12, z=4,rx=10)" >&2; exit 2; }
 fi
 if [[ -n "${SWEEP:-}" ]]; then
@@ -90,7 +97,10 @@ for c in "$(command -v openscad 2>/dev/null || true)" "$HOME/.local/bin/openscad
 done
 
 base="${MODEL%.scad}"
-[[ -n "$OUTBASE" ]] && base="$(dirname "$MODEL")/$OUTBASE"
+if [[ -n "$OUTBASE" ]]; then
+  [[ "$OUTBASE" =~ ^[A-Za-z0-9._-]+$ && "$OUTBASE" != *..* ]] || { echo "error: --out must be a plain name" >&2; exit 2; }
+  base="$(dirname "$MODEL")/$OUTBASE"
+fi
 
 XVFB=""
 if [[ -z "${DISPLAY:-}" ]] && command -v xvfb-run >/dev/null 2>&1; then
@@ -99,7 +109,7 @@ fi
 
 run_oscad() {
   local out
-  if ! out="$(bash "$HERE/oscad.sh" "$@" 2>&1)"; then
+  if ! out="$(${TMO[@]+"${TMO[@]}"} bash "$HERE/oscad.sh" "$@" 2>&1)"; then
     if grep -q "top level object is empty" <<<"$out"; then
       echo ">> EMPTY geometry | vol 0 mm^3 (for intersection checks: no overlap)"
       return 0
@@ -118,7 +128,7 @@ run_png() {
     return 0
   fi
   local out
-  if ! out="$($XVFB "$NATIVE" "$@" 2>&1)"; then
+  if ! out="$(${TMO[@]+"${TMO[@]}"} $XVFB "$NATIVE" "$@" 2>&1)"; then
     echo "$out" | tail -25 >&2
     echo "RENDER FAILED (openscad exited non-zero)" >&2
     if echo "$out" | grep -q "X server"; then
@@ -130,7 +140,7 @@ run_png() {
 }
 
 stl_info() {  # line1 summary, line2 "MX MY MZ", line3 "VOL", line4 "LOX LOY LOZ HIX HIY HIZ"
-  python3 - "$1" <<'PY'
+  py - "$(absp "$1")" <<'PY'
 import struct, sys
 d = open(sys.argv[1],'rb').read()
 n = struct.unpack('<I', d[80:84])[0]
@@ -163,12 +173,11 @@ print("%.4f %.4f %.4f %.4f %.4f %.4f" % tuple(lo + hi))
 PY
 }
 
-absp() { echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"; }
 
 if [[ "${HTML3D:-0}" == 1 ]]; then
   run_oscad -o "${base}.stl" --export-format binstl ${DEFINES[@]+"${DEFINES[@]}"} "$MODEL"
   INFO=$(stl_info "${base}.stl"); echo ">> bbox $(echo "$INFO" | sed -n 1p)"
-  python3 "$HERE/mark3d.py" "${base}.stl" "${base}.html"
+  py "$HERE/mark3d.py" "${base}.stl" "${base}.html"
   echo ">> HTML -> ${base}.html (interactive 3D — for the human)"
   exit 0
 fi
@@ -176,7 +185,7 @@ fi
 if [[ -n "${MARK3D:-}" ]]; then
   [[ -f "$MARK3D" ]] || { echo "--mark3d: '$MARK3D' not found" >&2; exit 2; }
   run_oscad -o "${base}.stl" --export-format binstl ${DEFINES[@]+"${DEFINES[@]}"} "$MODEL"
-  python3 "$HERE/mark3d.py" "${base}.stl" "$MARK3D" "${base}_marked.html"
+  py "$HERE/mark3d.py" "${base}.stl" "$MARK3D" "${base}_marked.html"
   echo ">> HTML -> ${base}_marked.html (interactive 3D — for the human)"
   exit 0
 fi
@@ -191,12 +200,12 @@ if [[ -n "${MARK:-}" ]]; then
     "$(absp "${base}.stl")" "$(absp "$MARK")" > "$W"
   MI="$(stl_info "$MARK")"
   MMID="$(echo "$MI" | sed -n 2p)"
-  ZD="$(echo "$MI" | sed -n 1p | python3 -c "import sys,re;n=[float(x) for x in re.findall(r'[-\\d.]+',sys.stdin.readline())[:3]];print(max(max(n)*5,45))")"
+  ZD="$(echo "$MI" | sed -n 1p | py -c "import sys,re;n=[float(x) for x in re.findall(r'[-\\d.]+',sys.stdin.readline())[:3]];print(max(max(n)*5,45))")"
   run_png -o "${base}_mk1.png" --imgsize="$SIZE" --viewall --autocenter --colorscheme=Tomorrow --camera="0,0,0,55,0,25,140"  "$W"
   run_png -o "${base}_mk2.png" --imgsize="$SIZE" --viewall --autocenter --colorscheme=Tomorrow --camera="0,0,0,90,0,0,140"   "$W"
   run_png -o "${base}_mk3.png" --imgsize="$SIZE" --viewall --autocenter --colorscheme=Tomorrow --camera="0,0,0,125,0,25,140" "$W"
   run_png -o "${base}_mk4.png" --imgsize="$SIZE" --colorscheme=Tomorrow --camera="${MMID// /,},55,0,25,$ZD" "$W"
-  python3 - "$base" $MMID <<'PY'
+  py - "$base" $MMID <<'PY'
 import sys
 from PIL import Image, ImageDraw
 b=sys.argv[1]; mid=sys.argv[2:5]
@@ -230,7 +239,7 @@ if [[ "$DO_STL" == 1 ]]; then
       OLD=$(stl_info "$DIFF")
       echo ">> diff vs $DIFF"
       echo "   old:  $(echo "$OLD" | sed -n 1p)"
-      python3 -c "import sys; nv=float('$(echo "$INFO" | sed -n 3p)'); ov=float('$(echo "$OLD" | sed -n 3p)'); print('   dvol: %+.0f mm^3 (%+.1f%%)' % (nv-ov, 100*(nv-ov)/ov if ov else 0))"
+      py -c "import sys; nv=float('$(echo "$INFO" | sed -n 3p)'); ov=float('$(echo "$OLD" | sed -n 3p)'); print('   dvol: %+.0f mm^3 (%+.1f%%)' % (nv-ov, 100*(nv-ov)/ov if ov else 0))"
     fi
   fi
 fi
@@ -269,7 +278,7 @@ esac
 if [[ -n "$CUT" ]]; then
   [[ -n "$INFO" ]] || { echo "--cut needs the STL step (omit --no-stl)" >&2; exit 2; }
   CS="${SIZE%%,*}"; (( CS < 640 )) && CS=640
-  python3 "$HERE/section.py" "${base}_cut.png" "$CUT" "$(absp "${base}.stl")=$(basename "$base")" --size "$CS" \
+  py "$HERE/section.py" "${base}_cut.png" "$CUT" "$(absp "${base}.stl")=$(basename "$base")" --size "$CS" \
     | sed 's/^/>> /'
 fi
 if [[ -n "$CUT3D" ]]; then

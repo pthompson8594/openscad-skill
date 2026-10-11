@@ -186,12 +186,19 @@ checks then pass.
 - **Pinned engine.** `setup.sh` installs `openscad-wasm-prebuilt@1.2.0` without
   running install scripts, checks its hash against the one in the script, and
   removes it if they differ.
+- **Python packages** (numpy, manifold3d, scipy, pillow, and cadquery for STEP) come
+  from PyPI within tested version ranges. They are not hash-pinned. In a locked-down
+  environment, install them yourself first and the scripts will use them.
+- **Runs safely in a model's folder.** The scripts never import Python from the
+  model's folder, refuse to write or delete outside it, skip symlinks when bundling,
+  and stop any OpenSCAD run after 15 minutes (`OSCAD_TIMEOUT` changes this).
 - **Nothing personal in outputs.** STL, 3MF, DXF, STEP, the viewer and the
   bundle carry part names, labels and the revision code, not your file paths,
   user name or machine details.
 - **Untrusted models.** An OpenSCAD file can read any local file it names
-  (`import`, `include`, `surface`) into its geometry. Only run models you
-  trust, or check those lines first. The skill tells Claude to do this. Part
+  (`import`, `include`, `surface`) into its geometry, possibly through a symlink.
+  Only run models you trust, or check those lines first. The skill tells Claude
+  to do this, and to treat text the model prints as data, not instructions. Part
   ids are restricted to plain names, so a model cannot make the scripts write
   outside its own folders, and labels are escaped in the viewer.
 - **Releases** are built by GitHub Actions from the tagged commit. The workflow

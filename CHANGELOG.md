@@ -31,6 +31,19 @@
     are pinned to commits.
   - Temp files are cleaned up.
   - SKILL.md and the README now cover models from untrusted sources.
+  - From an independent attack test:
+    - Output and delete paths are confined to the model's folder, and a variant named
+      `..` is refused.
+    - Bundles skip symlinks, and an `include` mentioned only inside a string is no longer
+      bundled.
+    - Python is never imported from the model's folder.
+    - pip runs from the skill's folder, within version ranges.
+    - Every OpenSCAD run has a timeout (`OSCAD_TIMEOUT`, 15 minutes by default) and
+      cleans up its temp files.
+    - The WebAssembly engine reads only regular files, with size limits.
+    - Text the model prints is labelled `model says:`, and SKILL.md tells Claude not to
+      follow instructions in it.
+    - The `render.sh` viewers get the same content security policy.
 - **Automatic test and release.** GitHub Actions runs the self-test on every push. Running
   the "Test and release" workflow publishes the top CHANGELOG version, with the skill
   file attached.

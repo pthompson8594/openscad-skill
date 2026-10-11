@@ -37,9 +37,16 @@ const libs = [...(process.env.OPENSCADPATH || "").split(path.delimiter).filter(B
   path.join(H, ".local/share/OpenSCAD/libraries"), path.join(H, "Documents/OpenSCAD/libraries")]
   .map((d) => path.resolve(d)).filter((d) => fs.existsSync(d));
 const files = new Set();
-let dynamic = false;
+let dynamic = false, budget = 1e9;
+const MAXFILE = 200e6;
+function regular(f) {           // only ordinary files of sane size: no devices, FIFOs or giant reads
+  try { const st = fs.statSync(f); return st.isFile() && st.size <= MAXFILE && st.size <= budget ? st.size : -1; } catch (e) { return -1; }
+}
 function scan(f) {
-  if (files.has(f) || !fs.existsSync(f)) return;
+  if (files.has(f)) return;
+  const n = regular(f);
+  if (n < 0) return;
+  budget -= n;
   files.add(f);
   if (!/\.scad$/i.test(f)) return;
   const t = fs.readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
@@ -59,7 +66,9 @@ if (dynamic) {
   const d = path.dirname(input);
   for (const e of fs.readdirSync(d)) {
     const p = path.join(d, e);
-    try { if (fs.statSync(p).isFile() && fs.statSync(p).size < 100e6) files.add(p); } catch (e2) {}
+    try { if (fs.lstatSync(p).isSymbolicLink() || files.has(p)) continue; } catch (e2) { continue; }
+    const n = regular(p);
+    if (n >= 0) { budget -= n; files.add(p); }
   }
 }
 

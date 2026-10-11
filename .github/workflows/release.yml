@@ -61,7 +61,8 @@ jobs:
       - name: Date the CHANGELOG entry
         if: steps.v.outputs.stamp == 'yes'
         run: |
-          sed -i "0,/^## ${{ steps.v.outputs.version }} - unreleased/s//## ${{ steps.v.outputs.version }} - $(date -u +%Y-%m-%d)/" CHANGELOG.md
+          sed -i -E "0,/^## ${{ steps.v.outputs.version }}[^0-9].*[Uu]nreleased.*/s//## ${{ steps.v.outputs.version }} - $(date -u +%Y-%m-%d)/" CHANGELOG.md
+          git diff --quiet CHANGELOG.md && { echo "::error::Could not date the CHANGELOG heading"; exit 1; }
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -am "Release ${{ steps.v.outputs.version }}"

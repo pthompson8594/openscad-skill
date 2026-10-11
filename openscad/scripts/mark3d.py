@@ -25,13 +25,13 @@ out = sys.argv[-1]
 mb64, mmid, mdia = info(model)
 kb64, kmid, kdia = info(mark) if mark else ("", mmid, mdia)
 
-html = """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+html = """<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width, initial-scale=1">
 <style>body{margin:0;background:#222;overflow:hidden;font-family:sans-serif;touch-action:none}
 #hud{position:fixed;top:10px;left:10px;color:#ddd;font-size:13px}
 button{background:#444;color:#eee;border:1px solid #666;border-radius:4px;padding:4px 10px;margin-right:6px;cursor:pointer}
 button:hover{background:#555}</style>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js" integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu" crossorigin="anonymous"></script>
-<script>window.THREE||document.write('<script src="https://unpkg.com/three@0.128.0/build/three.min.js" integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu" crossorigin="anonymous"><\/script>')</script>
+<script>window.THREE||document.write('<script src="https://unpkg.com/three@0.128.0/build/three.min.js" integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu" crossorigin="anonymous"><\\/script>')</script>
 </head><body><div id="hud">
 <button onclick="focusAll()">whole part</button>__MARKBTN__
 <button onclick="ghost=!ghost;mat.opacity=ghost?0.28:0.95;mat.transparent=ghost;mat.depthWrite=!ghost">toggle ghost</button>
