@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.2.0 - unreleased
+## 2.2.0 - 2026-10-12
 
 - **Hardware layer.** `include <hardware.scad>` gives standard bought parts built from
   BOSL2's ISO and ASME tables: socket, button, countersunk and hex screws, matching
