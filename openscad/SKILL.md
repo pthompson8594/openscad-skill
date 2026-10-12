@@ -61,6 +61,29 @@ cuboid([30,20,10], rounding=2);       // filleted box, no minkowski
 threaded_rod(d=10, l=20, pitch=1.5);
 ```
 
+## Hardware (screws, nuts, washers, bearings, gears, NEMA motors)
+
+Never draw bought parts from remembered sizes. `include <hardware.scad>` (needs BOSL2; the scripts find the file, bundles carry it; `include`, not `use`) gives ISO/ASME parts that match their holes:
+
+```scad
+include <hardware.scad>
+l = hw_screw_len("M3", plate_t + 4);                    // shortest real M3 length ≥ need (mm); undef = none
+translate([x,y,plate_t]) hw_screw(hw_spec("M3", l));    // seat (under head) at z=0, shaft down -Z
+translate([x,y,plate_t]) hw_screw_hole("M3,20", counterbore=3.5);   // same transform = lined up; fit="close|normal|loose"
+hw_nut("M3"); hw_nut_trap("M3", depth=3); hw_washer("M3"); hw_washer("1/4","uss");   // sit on / pocket down from z=0
+hw_bearing("608"); hw_nema(17); hw_nema_mount(17, 5);   // bearing on z=0; motor face at z=0, body below
+d = hw_gear_dist(1, 15, 40, backlash=0.1);              // centres incl. profile shift
+hw_spur_gear(1, 15, 6, shaft_diam=5.2, backlash=0.1); right(d) hw_spur_gear(1, 40, 6, mate=true, backlash=0.1);
+```
+
+Specs: `"M3,12"`, `"#8-32,1/2"`, `"1/4-20,1"`; `head="socket|button|flat|hex"` (countersunk: seat = flush top). Threads off by default (same envelope, fast); `thread=true` only for printed threads. Gears mesh along +X with `mate=true` on the second; move the pair together. Unsupported size/head combos (no M2–M4 hex heads): `python3 scripts/hardware.py sizes`.
+
+Pick lengths before modelling the parts around them — the design follows the screw, not the other way round:
+- `python3 scripts/hardware.py lengths M3` — buyable lengths (ISO series + commonly stocked `*`; inch = one stockist's list).
+- `python3 scripts/hardware.py pick M3 --grip 9.5 --nut [thin] [--washers 1]` — shortest length clearing the nut by 2 threads, and the next-shorter option with what to change. `--into 6` = tapped hole / heat-set insert depth instead (longest that won't bottom out, with engagement). `--grip` = seat to far face of the clamped parts, mm.
+
+Give bought parts `hw_` ids: `python3 scripts/asm.py model.scad --bom` (also with `--bundle`) writes `model_bom.csv` — bought vs made, counted by pieces × `qty=`. Screws that run into a modelled part's tapped holes: tag them `flex=<that part>`.
+
 ## Assemblies
 
 Tables near the top of the `.scad`, the single source every tool reads. Values may be expressions, but OpenSCAD reads top to bottom, so put the tables **after** the parameters and derived values they use (a table above them sees `undef`). `parts`, `checks`, `travel`, `report`, `variants`, `variant`, `bends`, `k_factor` and `part` are reserved names: don't use them for your own parameters (asm.py stops with a name-clash message).
@@ -99,6 +122,7 @@ pick("base") base();
 - `--holes [GAP]` holes in sheets within GAP mm that overlap but miss (`off by N mm`). Bought-hardware patterns still need a looked-up source.
 - `--cut` flat sheets → `model_cut/<id>.dxf` + `cutlist.csv`. `--step` → `model_step/<id>.step` (CadQuery, auto-installed, ~35 s first time). OpenSCAD itself cannot write STEP.
 - `--bundle` (implies `--print` and `--html`) zips model + print files + cut + step + viewer as `model_<rev>.zip` and deletes older bundles of the model; every output carries the same 7-character `rev`; outputs from an older rev are left out and named. Tell the user to upload the bundle, never loose files.
+- `--bom` → `model_bom.csv`: bought (`hw_`) and made parts with quantities.
 - `--html [--title T]` → `model.html`: coloured touch viewer — parts table (show / see-through), pull-apart, cut plane (X/Y/Z slider, flip), tap two points to measure, variant switcher; move with two fingers or right/Shift-drag, zoom toward cursor or fingers, double-tap a part (or pick it and "Zoom to it") to inspect it up close, "Reset view" to come back. The assembly deliverable; present unviewed.
 - `--variant A,B` limit to some variants; outputs go to per-variant subfolders, lines are prefixed `[A]`.
 

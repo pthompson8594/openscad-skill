@@ -28,6 +28,7 @@ jobs:
         run: |
           set -o pipefail
           bash openscad/scripts/setup.sh 2>&1 | tee setup.txt || { tail -5 setup.txt | sed 's/^/::error::/'; exit 1; }
+          bash openscad/scripts/get_bosl2.sh 2>&1 | tail -3
       - name: Self-test
         run: |
           python3 openscad/scripts/asm.py --selftest > selftest.txt 2>&1; rc=$?

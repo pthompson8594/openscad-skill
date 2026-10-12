@@ -117,6 +117,7 @@ run_oscad() {
   local out
   if ! out="$(${TMO[@]+"${TMO[@]}"} bash "$HERE/oscad.sh" "$@" 2>&1)"; then
     if grep -q "top level object is empty" <<<"$out"; then
+      echo "$out" | grep -E '^ERROR' | sort -u | sed 's/^/model says: /'
       echo ">> EMPTY geometry | vol 0 mm^3 (for intersection checks: no overlap)"
       return 0
     fi

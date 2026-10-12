@@ -1026,7 +1026,7 @@ def defuse(base):
     gone = []
     for f in os.listdir(d):
         q = os.path.join(d, f)
-        ours = f == b + ".html" or (f.startswith(b + "_") and (f.endswith((".zip", ".png")) or f[len(b) + 1:] in ("parts", "print", "cut", "step"))) or f.startswith(".asm_eval_")
+        ours = f == b + ".html" or (f.startswith(b + "_") and (f.endswith((".zip", ".png", "_bom.csv")) or f[len(b) + 1:] in ("parts", "print", "cut", "step"))) or f.startswith(".asm_eval_")
         if not ours:
             continue
         if os.path.islink(q):
@@ -1160,6 +1160,30 @@ def print_set(parts, outdir, rev, scad, colors):
         say("print: " + l)
     manifest(outdir, rev, scad, {k: v for k, v in qtys.items() if v > 1})
     say("print: %d files -> %s (rev %s)" % (len(lines), outdir, rev))
+
+
+# ------------------------------------------------------------ bill of materials
+def bom(parts, path):
+    """bought parts (hw_) and printed/cut parts with quantities; separate solids under one id count"""
+    rows = []
+    for p in parts:
+        if p.get("tri") is None:
+            continue
+        n = 1
+        man = manifold(p)
+        if man is not None:
+            n = max(1, len(man.decompose()))
+        rows.append(("bought" if p["hw"] else "made", p["label"], p["note"], n * p.get("qty", 1), p["tags"].get("mat", ""), p["id"]))
+    rows.sort(key=lambda r: (r[0] != "bought", r[1].lower()))
+    with open(path, "w") as fh:
+        fh.write("kind,item,note,qty,material,id\n")
+        for r in rows:
+            fh.write(",".join('"%s"' % str(x).replace('"', "'") for x in r) + "\n")
+    for kind in ("bought", "made"):
+        rs = [r for r in rows if r[0] == kind]
+        if rs:
+            say("bom %s: " % kind + "; ".join("%s%s x%d" % (r[1], " (%s)" % r[2] if r[2] else "", r[3]) for r in rs))
+    say("bom: %s" % path)
 
 
 # ------------------------------------------------------------ section --------
@@ -1493,6 +1517,27 @@ def html(sets, path, title, rev=""):
 
 
 # ------------------------------------------------------------ selftest -------
+HWSELF = """include <hardware.scad>
+part = "all";
+t = 8;
+L = hw_screw_len("M3", t + 0.5 + 2.4 + 1);
+parts = [ ["plate","Plate","PETG"], ["hw_screws","M3 socket head screw","ISO 4762",[0,0,0],"qty=4"], ["hw_washers","M3 washer","ISO 7089"],
+          ["hw_nuts","M3 nut","ISO 4032"], ["g1","Pinion"], ["g2","Gear"], ["g3","Gear 16"], ["g4","Gear 20"] ];
+checks = [ ["hw_screws","plate","touch"], ["hw_washers","plate","touch"], ["hw_nuts","hw_washers","touch"],
+           ["g1","g2","clear"], ["g1","g2","<=",0.3], ["g3","g4","clear"] ];
+report = [ ["len", hw_screw_len("M3", 12.9)], ["gd", hw_gear_dist(1, 20, 30)], ["lens", len(hw_screw_lengths("M3", extras=false))] ];
+module pick(n){ if(part=="all"||part==n) children(); }
+xs = [5, 25];
+pick("plate") difference() { cube([30, 20, t]); for (x = xs) translate([x, 10, t]) hw_screw_hole("M3,20"); }
+pick("hw_screws") for (x = xs) translate([x, 10, t]) hw_screw(hw_spec("M3", L));
+pick("hw_washers") for (x = xs) translate([x, 10, -0.5]) hw_washer("M3");
+pick("hw_nuts") for (x = xs) translate([x, 10, -2.9]) hw_nut("M3");
+pick("g1") translate([0, 60, 0]) hw_spur_gear(1, 15, 4);
+pick("g2") translate([hw_gear_dist(1, 15, 40), 60, 0]) hw_spur_gear(1, 40, 4, mate = true);
+pick("g3") translate([0, 120, 0]) hw_spur_gear(1, 16, 4, backlash = 0.1);
+pick("g4") translate([hw_gear_dist(1, 16, 20, backlash = 0.1), 120, 0]) hw_spur_gear(1, 20, 4, mate = true, backlash = 0.1);
+"""
+
 SELF = """part="all";
 h = 6;
 parts = [
@@ -1684,6 +1729,33 @@ pick("l") translate([20,0,4.02]) cube([5,5,1]);
         msg = str(e)
     TIMEOUT = old
     res.append(("a model that never finishes is stopped and leaves no temp files", "longer than 3 s" in msg and not [x for x in os.listdir(sd) if x.startswith(".asm_eval")]))
+    hp = subprocess.run([sys.executable, "-I", os.path.join(HERE, "hardware.py"), "pick", "M3", "--grip", "9.5", "--nut"], capture_output=True, text=True).stdout
+    hi = subprocess.run([sys.executable, "-I", os.path.join(HERE, "hardware.py"), "pick", "#8-32", "--grip", "6", "--into", "8"], capture_output=True, text=True).stdout
+    res.append(("hardware.py: M3 through 9.5 mm + nut picks 16 mm, offers 12; #8-32 into 8 mm fits", "use M3 16 mm" in hp and "or M3 12 mm" in hp and hi.startswith("use #8-32")))
+    blibs = [x for x in scad_env()["OPENSCADPATH"].split(os.pathsep) if x] + USERLIBS
+    if not any(os.path.isfile(os.path.join(x, "BOSL2", "std.scad")) for x in blibs):
+        print("SKIP hardware.scad tests: BOSL2 not installed (bash scripts/get_bosl2.sh)")
+    else:
+        hd = os.path.join(d, "hw")
+        os.makedirs(hd)
+        fh = os.path.join(hd, "hw.scad")
+        open(fh, "w").write(HWSELF)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            try:
+                main([fh, "--check", "--bundle"])
+            except SystemExit:
+                pass
+        oh = buf.getvalue()
+        zh = [x for x in os.listdir(hd) if x.endswith(".zip")]
+        names = zipfile.ZipFile(os.path.join(hd, zh[0])).namelist() if zh else []
+        res.append(("hardware.scad: real length, screw seats in its hole, nut and gears clear, 2 mesh phases",
+                    "report: len 16 | gd 25 | lens 9" in oh and "checks: 6 pass, 0 FAIL" in oh))
+        res.append(("bom: bought vs made with pieces x qty; bundle carries hardware.scad and the BOM",
+                    "M3 socket head screw (ISO 4762) x8" in oh and "Plate (PETG) x1" in oh and "hardware.scad" in names and "hw_tables.scad" in names and "hw_bom.csv" in names))
+        open(os.path.join(sd, "bad.scad"), "w").write('include <hardware.scad>\nhw_screw("M3,10", head="hex");\n')
+        rb = subprocess.run(["bash", os.path.join(HERE, "render.sh"), "bad.scad", "--no-png"], cwd=sd, capture_output=True, text=True, env=scad_env())
+        res.append(("render.sh shows the library's ERROR when a model renders empty", "model says:" in rb.stdout + rb.stderr and "ERROR" in rb.stdout + rb.stderr))
     for name, good in res:
         print(("PASS " if good else "FAIL ") + name)
     allok = all(g for _, g in res)
@@ -1712,6 +1784,7 @@ def main(argv=None):
     ap.add_argument("--size", type=int, default=720)
     ap.add_argument("--walls", nargs="?", const=1.2, type=float, default=None)
     ap.add_argument("--print", dest="prnt", action="store_true")
+    ap.add_argument("--bom", action="store_true")
     ap.add_argument("--variant", default="")
     ap.add_argument("--cut", action="store_true")
     ap.add_argument("--step", action="store_true")
@@ -1796,6 +1869,8 @@ def main(argv=None):
             step(parts, inside(base + "_step" + sub, root_), rev, a.scad)
         if a.prnt or a.bundle:
             print_set(parts, base + "_print" + sub, rev, a.scad, colours(parts))
+        if a.bom or a.bundle:
+            bom(parts, inside(base + sub.replace(os.sep, "_") + "_bom.csv", os.path.dirname(os.path.abspath(a.scad))))
         sets.append((v, parts))
     PFX[0] = ""
     if a.html or a.bundle:
@@ -1809,7 +1884,13 @@ def main(argv=None):
         got = set()
         with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
             rroot = os.path.realpath(root)
+            skl = os.path.realpath(os.path.join(os.path.dirname(HERE), "lib"))
             for f in sorted(deps(a.scad)):
+                if f.endswith(".scad") and os.path.dirname(os.path.realpath(f)) == skl and not os.path.exists(os.path.join(root, os.path.basename(f))):
+                    zf.write(os.path.realpath(f), os.path.basename(f))     # the skill's own library files, so the model opens elsewhere
+                    if os.path.basename(f) == "hardware.scad":
+                        say("bundle: includes hardware.scad - opening the model elsewhere also needs BOSL2 (github.com/BelfrySCAD/BOSL2)")
+                    continue
                 if not f.endswith(".scad") or not f.startswith(root + os.sep):
                     continue
                 if os.path.islink(f) or os.stat(f).st_nlink > 1 or not os.path.realpath(f).startswith(rroot + os.sep):
@@ -1832,6 +1913,9 @@ def main(argv=None):
                             continue
                         zf.write(q, os.path.relpath(q, root))
             zf.write(base + ".html", os.path.basename(base) + ".html")
+            for f in sorted(os.listdir(root)):
+                if f.startswith(os.path.basename(base)) and f.endswith("_bom.csv") and not os.path.islink(os.path.join(root, f)):
+                    zf.write(os.path.join(root, f), f)
         say("bundle: %s (model + %s + viewer, all rev %s; hardware left out)" % (z, " + ".join({"print": "print files", "cut": "cut files", "step": "STEP files"}[k] for k in ("print", "cut", "step") if k in got) or "no fabrication files", rev))
         if old:
             say("bundle: removed older bundle%s %s so only the current one can be sent" % ("s" if len(old) > 1 else "", ", ".join(old)))

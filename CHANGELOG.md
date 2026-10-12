@@ -1,5 +1,34 @@
 # Changelog
 
+## 2.2.0 - unreleased
+
+- **Hardware layer.** `include <hardware.scad>` gives standard bought parts built from
+  BOSL2's ISO and ASME tables: socket, button, countersunk and hex screws, matching
+  clearance holes (close, normal or loose fit) and counterbores, nuts and nut traps,
+  washers, ball bearings, spur gears and racks, and NEMA motors with their mounts.
+  Metric and inch sizes both work. A screw and its hole line up when given the same
+  placement, threads are off unless asked for, and meshing gears are spaced and phased
+  for you, with optional backlash for printed gears.
+- **Real screw lengths.** `scripts/hardware.py` lists the lengths you can actually buy
+  for a size and picks one for a joint: the shortest that clears a nut by two threads
+  (with washers if any), or the longest that fits a tapped hole or insert, with the
+  thread engagement. When the nearest length doesn't fit it says what to change.
+  `hw_screw_len()` does the same inside a model. Lengths come from the ISO series plus
+  commonly stocked sizes; inch lengths are one stockist's list. Sources are in
+  `lib/hw_tables.json`.
+- **Bill of materials.** `asm.py --bom` (and every `--bundle`) writes `model_bom.csv`
+  with bought and made parts and their quantities.
+- **Bundles open anywhere.** A bundle now carries the skill's own library files that
+  the model uses (hardware.scad, loft.scad, sheet.scad).
+- **Clearer failures.** When a model renders empty because a library stopped it,
+  `render.sh` now shows the library's error message.
+- `get_bosl2.sh` installs a fixed BOSL2 release (v2.0.768, commit-checked) instead of
+  whatever is newest.
+- New example: `examples/gearstage.scad`, a NEMA 17 motor plate with a gear pair and a
+  608 bearing.
+- The self-test covers length picking, hardware placement, gear meshing, the BOM and
+  bundling. CI installs BOSL2 so these run.
+
 ## 2.1.0 - 2026-10-11
 
 - **Viewer: inspect small parts.** On a computer, right-drag or Shift-drag moves the

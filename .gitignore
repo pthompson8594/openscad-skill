@@ -10,3 +10,4 @@ __pycache__/
 *_print/
 *_section_*.png
 *.3mf
+*_bom.csv

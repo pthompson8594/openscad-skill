@@ -1,0 +1,1746 @@
+{
+ "about": "Standard fastener data for lib/hardware.scad and scripts/hardware.py. Lengths, washers and clearance holes were taken from the pages listed in each 'source'; nut and head dimensions come from BOSL2's built-in ISO/ASME tables. Metric in mm, inch values in inches. Regenerate lib/hw_tables.scad with: python3 scripts/hardware.py gen",
+ "screw_lengths": {
+  "iso4762": {
+   "source": [
+    "https://engineersedge.com/iso_socket_head_screw.htm",
+    "https://fasten.it/en/norms/norm/din_en_iso_4762"
+   ],
+   "note": "'standard' = ISO 4762 l-series per size from engineersedge (range M2 3-20, M2.5 4-25, M3 5-30, M4 6-40, M5 8-50, M6 10-60, M8 12-80, M10 16-100, M12 20-120; capped at 100). Ranges agree with fasten.it's commercial-items mass table. 'common_extra' = lengths present in fasten.it's 'DIN 4762 approximate mass - commercial items' table but absent from the ISO series (18 mm for M2-M10, 75 mm for M8-M12). fasten.it does not label table columns per cell; size assignment was inferred from the monotonic mass-per-length progression. Supplier-only lengths such as M3x14 were NOT found in any fetched source and are not listed. Thread length b ref (engineersedge): M2 16, M2.5 17, M3 18, M4 20, M5 22, M6 24, M8 28, M10 32, M12 36 mm; longer screws are partially threaded.",
+   "sizes": {
+    "M2": {
+     "standard": [
+      3,
+      4,
+      5,
+      6,
+      8,
+      10,
+      12,
+      16,
+      20
+     ],
+     "common_extra": [
+      18
+     ]
+    },
+    "M2.5": {
+     "standard": [
+      4,
+      5,
+      6,
+      8,
+      10,
+      12,
+      16,
+      20,
+      25
+     ],
+     "common_extra": [
+      18
+     ]
+    },
+    "M3": {
+     "standard": [
+      5,
+      6,
+      8,
+      10,
+      12,
+      16,
+      20,
+      25,
+      30
+     ],
+     "common_extra": [
+      18
+     ]
+    },
+    "M4": {
+     "standard": [
+      6,
+      8,
+      10,
+      12,
+      16,
+      20,
+      25,
+      30,
+      35,
+      40
+     ],
+     "common_extra": [
+      18
+     ]
+    },
+    "M5": {
+     "standard": [
+      8,
+      10,
+      12,
+      16,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50
+     ],
+     "common_extra": [
+      18
+     ]
+    },
+    "M6": {
+     "standard": [
+      10,
+      12,
+      16,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60
+     ],
+     "common_extra": [
+      18
+     ]
+    },
+    "M8": {
+     "standard": [
+      12,
+      16,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60,
+      65,
+      70,
+      80
+     ],
+     "common_extra": [
+      18,
+      75
+     ]
+    },
+    "M10": {
+     "standard": [
+      16,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60,
+      65,
+      70,
+      80,
+      90,
+      100
+     ],
+     "common_extra": [
+      18,
+      75
+     ]
+    },
+    "M12": {
+     "standard": [
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60,
+      65,
+      70,
+      80,
+      90,
+      100
+     ],
+     "common_extra": [
+      75
+     ]
+    }
+   }
+  },
+  "iso7380": {
+   "source": [
+    "https://engineersedge.com/iso_socket_button_head.htm",
+    "https://fasten.it/en/norms/norm/din_en_iso_7380-1"
+   ],
+   "note": "'standard' = ISO 7380 length list from engineersedge (single source; the ISO range is short: M3 6-12, M4 8-16, M5/M6 10-30, M8 10-40, M10 16-40). Button heads are commonly sold much longer: 'common_extra' = additional lengths from fasten.it's 'DIN 7380-1 approximate mass - commercial sizes' table (column assignment inferred from mass progression): M3 5-30, M4 6-50, M5 6-60, M6 6-100, M8 10-100, M10 12-100 (that table has no 65 or 75 row). Fully threaded.",
+   "sizes": {
+    "M3": {
+     "standard": [
+      6,
+      8,
+      10,
+      12
+     ],
+     "common_extra": [
+      5,
+      14,
+      16,
+      18,
+      20,
+      22,
+      25,
+      30
+     ]
+    },
+    "M4": {
+     "standard": [
+      8,
+      10,
+      12,
+      16
+     ],
+     "common_extra": [
+      6,
+      14,
+      18,
+      20,
+      22,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50
+     ]
+    },
+    "M5": {
+     "standard": [
+      10,
+      12,
+      16,
+      20,
+      25,
+      30
+     ],
+     "common_extra": [
+      6,
+      8,
+      14,
+      18,
+      22,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60
+     ]
+    },
+    "M6": {
+     "standard": [
+      10,
+      12,
+      16,
+      20,
+      25,
+      30
+     ],
+     "common_extra": [
+      6,
+      8,
+      14,
+      18,
+      22,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60,
+      70,
+      80,
+      90,
+      100
+     ]
+    },
+    "M8": {
+     "standard": [
+      10,
+      12,
+      16,
+      20,
+      25,
+      30,
+      35,
+      40
+     ],
+     "common_extra": [
+      14,
+      18,
+      22,
+      45,
+      50,
+      55,
+      60,
+      70,
+      80,
+      90,
+      100
+     ]
+    },
+    "M10": {
+     "standard": [
+      16,
+      20,
+      25,
+      30,
+      35,
+      40
+     ],
+     "common_extra": [
+      12,
+      14,
+      18,
+      22,
+      45,
+      50,
+      55,
+      60,
+      70,
+      80,
+      90,
+      100
+     ]
+    }
+   }
+  },
+  "iso10642": {
+   "source": [
+    "https://fasten.it/en/norms/norm/din_7991",
+    "https://webstore.ansi.org/preview-pages/ISO/preview_ISO+10642-2019.pdf"
+   ],
+   "note": "COULD NOT SOURCE the per-size ISO 10642 l-range (fasten.it ISO 10642 pages have no length data; engineersedge 10642 page has no length row; globalfastener gives only a combined list; the standard preview stops before Table 1). The ISO 10642:2019 foreword states 'the shorter lengths for M4 to M20 were deleted', so the ISO range differs by edition. 'standard' is therefore EMPTY. 'common_extra' holds the predecessor DIN 7991 'commercial sizes' lengths from fasten.it (column assignment inferred from mass progression): M3 6-40, M4 6-60, M5 8-60, M6 8-100, M8 10-100, M10 12-100. Treat as 'commonly sold', not as ISO 10642 conformance.",
+   "sizes": {
+    "M3": {
+     "standard": [],
+     "common_extra": [
+      6,
+      8,
+      10,
+      12,
+      16,
+      20,
+      25,
+      30,
+      35,
+      40
+     ]
+    },
+    "M4": {
+     "standard": [],
+     "common_extra": [
+      6,
+      8,
+      10,
+      12,
+      16,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60
+     ]
+    },
+    "M5": {
+     "standard": [],
+     "common_extra": [
+      8,
+      10,
+      12,
+      16,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60
+     ]
+    },
+    "M6": {
+     "standard": [],
+     "common_extra": [
+      8,
+      10,
+      12,
+      16,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60,
+      65,
+      70,
+      75,
+      80,
+      90,
+      100
+     ]
+    },
+    "M8": {
+     "standard": [],
+     "common_extra": [
+      10,
+      12,
+      16,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60,
+      65,
+      70,
+      75,
+      80,
+      90,
+      100
+     ]
+    },
+    "M10": {
+     "standard": [],
+     "common_extra": [
+      12,
+      16,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60,
+      65,
+      70,
+      75,
+      80,
+      90,
+      100
+     ]
+    }
+   }
+  },
+  "iso4017": {
+   "source": [
+    "https://engineersedge.com/iso_hex_head_screw.htm",
+    "https://fasten.it/en/norms/norm/din_933"
+   ],
+   "note": "'standard' = ISO 4017 lengths from engineersedge (range M3 6-30, M4 8-40, M5 10-50, M6 12-60, M8 16-80, M10 20-100, M12 25-120; capped at 100). 'common_extra' = additional lengths in fasten.it's 'DIN 933 commercial items' mass table (size columns inferred from mass progression): includes 4,5,7,14,18,22,28,75 etc. Fully threaded by definition.",
+   "sizes": {
+    "M3": {
+     "standard": [
+      6,
+      8,
+      10,
+      12,
+      16,
+      20,
+      25,
+      30
+     ],
+     "common_extra": [
+      4,
+      5,
+      7,
+      14,
+      18,
+      22,
+      28
+     ]
+    },
+    "M4": {
+     "standard": [
+      8,
+      10,
+      12,
+      16,
+      20,
+      25,
+      30,
+      35,
+      40
+     ],
+     "common_extra": [
+      5,
+      6,
+      7,
+      14,
+      18,
+      22,
+      28,
+      45,
+      50,
+      55,
+      60,
+      65,
+      70
+     ]
+    },
+    "M5": {
+     "standard": [
+      10,
+      12,
+      16,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50
+     ],
+     "common_extra": [
+      6,
+      7,
+      8,
+      14,
+      18,
+      22,
+      28,
+      55,
+      60,
+      65,
+      70,
+      75,
+      80
+     ]
+    },
+    "M6": {
+     "standard": [
+      12,
+      16,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60
+     ],
+     "common_extra": [
+      6,
+      7,
+      8,
+      10,
+      14,
+      18,
+      22,
+      28,
+      65,
+      70,
+      75,
+      80,
+      90,
+      100
+     ]
+    },
+    "M8": {
+     "standard": [
+      16,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60,
+      65,
+      70,
+      80
+     ],
+     "common_extra": [
+      8,
+      10,
+      12,
+      14,
+      18,
+      22,
+      28,
+      75,
+      90,
+      100
+     ]
+    },
+    "M10": {
+     "standard": [
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60,
+      65,
+      70,
+      80,
+      90,
+      100
+     ],
+     "common_extra": [
+      8,
+      10,
+      12,
+      14,
+      16,
+      18,
+      22,
+      28,
+      75
+     ]
+    },
+    "M12": {
+     "standard": [
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60,
+      65,
+      70,
+      80,
+      90,
+      100
+     ],
+     "common_extra": [
+      10,
+      12,
+      14,
+      16,
+      18,
+      20,
+      22,
+      28,
+      75
+     ]
+    }
+   }
+  },
+  "asme_b18_3_shcs": {
+   "source": [
+    "https://boltdepot.com/Socket_cap_Alloy_steel_black_oxide_finish_2-56",
+    "https://boltdepot.com/Socket_cap_Alloy_steel_black_oxide_finish_4-40",
+    "https://boltdepot.com/Socket_cap_Alloy_steel_black_oxide_finish_6-32",
+    "https://boltdepot.com/Socket_cap_Alloy_steel_black_oxide_finish_8-32",
+    "https://boltdepot.com/Socket_cap_Alloy_steel_black_oxide_finish_10-24",
+    "https://boltdepot.com/Socket_cap_Alloy_steel_black_oxide_finish_10-32",
+    "https://boltdepot.com/Socket_cap_Alloy_steel_black_oxide_finish_1_4-20",
+    "https://boltdepot.com/Socket_cap_Alloy_steel_black_oxide_finish_5_16-18",
+    "https://boltdepot.com/Socket_cap_Alloy_steel_black_oxide_finish_3_8-16",
+    "https://boltdepot.com/Socket_cap_Alloy_steel_black_oxide_finish_1_2-13"
+   ],
+   "note": "Not ASME-defined lists: these are Bolt Depot's stocked lengths (alloy steel, black oxide) per size, decimal inches, capped at 4 in. ASME B18.3 itself defines body/grip lengths per nominal length (1/4-in steps 1 to 3.5 in, 1/2-in steps above, per aftfasteners.com B18.3-2003 table) but no fetched source gave a per-size 'standard length' list. Supplier oddities kept as printed (e.g. #4-40 1-5/16, #10-24 2-3/8; 1/2-13 list lacks 1-1/8). Other finishes/stainless have different stock.",
+   "sizes": {
+    "#2-56": [
+     0.125,
+     0.15625,
+     0.1875,
+     0.25,
+     0.3125,
+     0.375,
+     0.4375,
+     0.5,
+     0.625,
+     0.75,
+     0.875,
+     1.0
+    ],
+    "#4-40": [
+     0.125,
+     0.1875,
+     0.25,
+     0.3125,
+     0.375,
+     0.4375,
+     0.5,
+     0.5625,
+     0.625,
+     0.75,
+     0.875,
+     1.0,
+     1.125,
+     1.25,
+     1.3125,
+     1.375,
+     1.5,
+     1.75,
+     2.0
+    ],
+    "#6-32": [
+     0.125,
+     0.1875,
+     0.25,
+     0.3125,
+     0.375,
+     0.4375,
+     0.5,
+     0.5625,
+     0.625,
+     0.75,
+     0.875,
+     1.0,
+     1.125,
+     1.25,
+     1.375,
+     1.5,
+     1.625,
+     1.75,
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0
+    ],
+    "#8-32": [
+     0.125,
+     0.1875,
+     0.25,
+     0.3125,
+     0.375,
+     0.4375,
+     0.5,
+     0.5625,
+     0.625,
+     0.75,
+     0.875,
+     1.0,
+     1.125,
+     1.25,
+     1.375,
+     1.5,
+     1.75,
+     1.875,
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     4.0
+    ],
+    "#10-24": [
+     0.25,
+     0.3125,
+     0.375,
+     0.4375,
+     0.5,
+     0.5625,
+     0.625,
+     0.75,
+     0.875,
+     1.0,
+     1.125,
+     1.25,
+     1.375,
+     1.5,
+     1.625,
+     1.75,
+     1.875,
+     2.0,
+     2.25,
+     2.375,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     3.75,
+     4.0
+    ],
+    "#10-32": [
+     0.1875,
+     0.25,
+     0.3125,
+     0.375,
+     0.4375,
+     0.5,
+     0.5625,
+     0.625,
+     0.75,
+     0.875,
+     1.0,
+     1.125,
+     1.25,
+     1.375,
+     1.5,
+     1.625,
+     1.75,
+     1.875,
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     3.75,
+     4.0
+    ],
+    "1/4-20": [
+     0.25,
+     0.3125,
+     0.375,
+     0.4375,
+     0.5,
+     0.5625,
+     0.625,
+     0.75,
+     0.875,
+     1.0,
+     1.125,
+     1.25,
+     1.375,
+     1.5,
+     1.625,
+     1.75,
+     1.875,
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     3.75,
+     4.0
+    ],
+    "5/16-18": [
+     0.25,
+     0.3125,
+     0.375,
+     0.5,
+     0.625,
+     0.75,
+     0.875,
+     1.0,
+     1.125,
+     1.25,
+     1.375,
+     1.5,
+     1.625,
+     1.75,
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     3.75,
+     4.0
+    ],
+    "3/8-16": [
+     0.375,
+     0.5,
+     0.625,
+     0.75,
+     0.875,
+     1.0,
+     1.125,
+     1.25,
+     1.375,
+     1.5,
+     1.75,
+     1.875,
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     3.75,
+     4.0
+    ],
+    "1/2-13": [
+     0.5,
+     0.625,
+     0.75,
+     0.875,
+     1.0,
+     1.25,
+     1.375,
+     1.5,
+     1.75,
+     1.875,
+     2.0,
+     2.25,
+     2.5,
+     2.75,
+     3.0,
+     3.25,
+     3.5,
+     3.75,
+     4.0
+    ]
+   }
+  }
+ },
+ "washers": {
+  "iso7089": {
+   "source": [
+    "https://fasten.it/norms/norm/din_en_iso_7089",
+    "https://torqbolt.com/iso-7089-flat-washers-200hv-dimensions-standards-specifications",
+    "https://www.jcfasteners.com/wp-content/uploads/ISO-7089-Plain-Washer-B6iD02-SS316.pdf"
+   ],
+   "note": "Nominal values: d1 = inner dia (nom = min), d2 = outer dia (nom = max), h = nominal thickness, mm. All three sources agree on nominals. Tolerances (torqbolt): e.g. M3 d1 3.20-3.38, d2 6.64-7.00, h 0.45-0.55.",
+   "sizes": {
+    "M2": {
+     "d1": 2.2,
+     "d2": 5,
+     "h": 0.3
+    },
+    "M2.5": {
+     "d1": 2.7,
+     "d2": 6,
+     "h": 0.5
+    },
+    "M3": {
+     "d1": 3.2,
+     "d2": 7,
+     "h": 0.5
+    },
+    "M4": {
+     "d1": 4.3,
+     "d2": 9,
+     "h": 0.8
+    },
+    "M5": {
+     "d1": 5.3,
+     "d2": 10,
+     "h": 1
+    },
+    "M6": {
+     "d1": 6.4,
+     "d2": 12,
+     "h": 1.6
+    },
+    "M8": {
+     "d1": 8.4,
+     "d2": 16,
+     "h": 1.6
+    },
+    "M10": {
+     "d1": 10.5,
+     "d2": 20,
+     "h": 2
+    },
+    "M12": {
+     "d1": 13,
+     "d2": 24,
+     "h": 2.5
+    }
+   }
+  },
+  "uss_sae": {
+   "source": [
+    "https://engineersedge.com/plain_washers.htm",
+    "https://fastenersplus.com/cdn/shop/files/CQ-Spec-Sheet-SAE-Flat-Washers.pdf",
+    "https://www.portlandbolt.com/technical/faqs/standards-for-stainless-steel-flat-washers/",
+    "https://boltsandnuts.com/user/files/Round_Washer_Identification_Chart.pdf",
+    "https://www.mcmaster.com/uss-washers"
+   ],
+   "note": "Inches, basic (nominal) values. SAE = ASME B18.21.1 Type A narrow (N) series; USS = Type A wide (W) series (engineersedge Type A table; SAE/USS labelling per boltsandnuts chart and fastenersplus SAE sheet). #4 SAE from fastenersplus only. USS for #4-#10 not sourced (Type A table gives a single row for #6-#10, matching SAE). McMaster stocks 1/4 USS with OD 0.750 (vs B18.21.1 0.734).",
+   "sizes": {
+    "#4": {
+     "sae": {
+      "id": 0.125,
+      "od": 0.312,
+      "t": 0.032
+     }
+    },
+    "#6": {
+     "sae": {
+      "id": 0.156,
+      "od": 0.375,
+      "t": 0.049
+     }
+    },
+    "#8": {
+     "sae": {
+      "id": 0.188,
+      "od": 0.438,
+      "t": 0.049
+     }
+    },
+    "#10": {
+     "sae": {
+      "id": 0.219,
+      "od": 0.5,
+      "t": 0.049
+     }
+    },
+    "1/4": {
+     "sae": {
+      "id": 0.281,
+      "od": 0.625,
+      "t": 0.065
+     },
+     "uss": {
+      "id": 0.312,
+      "od": 0.734,
+      "t": 0.065
+     }
+    },
+    "5/16": {
+     "sae": {
+      "id": 0.344,
+      "od": 0.688,
+      "t": 0.065
+     },
+     "uss": {
+      "id": 0.375,
+      "od": 0.875,
+      "t": 0.083
+     }
+    },
+    "3/8": {
+     "sae": {
+      "id": 0.406,
+      "od": 0.812,
+      "t": 0.065
+     },
+     "uss": {
+      "id": 0.438,
+      "od": 1.0,
+      "t": 0.083
+     }
+    },
+    "1/2": {
+     "sae": {
+      "id": 0.531,
+      "od": 1.062,
+      "t": 0.095
+     },
+     "uss": {
+      "id": 0.562,
+      "od": 1.375,
+      "t": 0.109
+     }
+    }
+   }
+  }
+ },
+ "clearance_holes": {
+  "iso273": {
+   "source": [
+    "https://ftp.isdi.co.cu/Biblioteca/BIBLIOTECA%20UNIVERSITARIA%20DEL%20ISDI/COLECCION%20DIGITAL%20DE%20NORMAS%20CUBANAS/2012/NC%20ISO%20273%20a2012%204p%20hkc.pdf",
+    "https://amesweb.info/Screws/Metric-Clearance-Hole-Chart.aspx"
+   ],
+   "note": "mm. Primary: NC ISO 273:2012, an identical adoption of ISO 273:1979 (fine H12, medium H13, coarse H14). Cross-check: amesweb ASME B18.2.8 metric table (close/normal/loose) gives identical nominal values for M2-M12.",
+   "sizes": {
+    "M2": {
+     "fine": 2.2,
+     "medium": 2.4,
+     "coarse": 2.6
+    },
+    "M2.5": {
+     "fine": 2.7,
+     "medium": 2.9,
+     "coarse": 3.1
+    },
+    "M3": {
+     "fine": 3.2,
+     "medium": 3.4,
+     "coarse": 3.6
+    },
+    "M4": {
+     "fine": 4.3,
+     "medium": 4.5,
+     "coarse": 4.8
+    },
+    "M5": {
+     "fine": 5.3,
+     "medium": 5.5,
+     "coarse": 5.8
+    },
+    "M6": {
+     "fine": 6.4,
+     "medium": 6.6,
+     "coarse": 7
+    },
+    "M8": {
+     "fine": 8.4,
+     "medium": 9,
+     "coarse": 10
+    },
+    "M10": {
+     "fine": 10.5,
+     "medium": 11,
+     "coarse": 12
+    },
+    "M12": {
+     "fine": 13,
+     "medium": 13.5,
+     "coarse": 14.5
+    }
+   }
+  }
+ },
+ "nuts": {
+  "source": "BOSL2 screws.scad nut_info() and screw_info() (ISO 4032 / ASME B18.6.3 & B18.2.2 tables inside BOSL2), extracted by running OpenSCAD",
+  "sizes": {
+   "M2": {
+    "pitch": 0.4,
+    "normal": {
+     "width": 4.0,
+     "thickness": 1.6
+    },
+    "thin": {
+     "width": 4.0,
+     "thickness": 1.2
+    }
+   },
+   "M2.5": {
+    "pitch": 0.45,
+    "normal": {
+     "width": 5.0,
+     "thickness": 2.0
+    },
+    "thin": {
+     "width": 5.0,
+     "thickness": 1.6
+    }
+   },
+   "M3": {
+    "pitch": 0.5,
+    "normal": {
+     "width": 5.5,
+     "thickness": 2.4
+    },
+    "thin": {
+     "width": 5.5,
+     "thickness": 1.8
+    }
+   },
+   "M4": {
+    "pitch": 0.7,
+    "normal": {
+     "width": 7.0,
+     "thickness": 3.2
+    },
+    "thin": {
+     "width": 7.0,
+     "thickness": 2.2
+    }
+   },
+   "M5": {
+    "pitch": 0.8,
+    "normal": {
+     "width": 8.0,
+     "thickness": 4.7
+    },
+    "thin": {
+     "width": 8.0,
+     "thickness": 2.7
+    }
+   },
+   "M6": {
+    "pitch": 1.0,
+    "normal": {
+     "width": 10.0,
+     "thickness": 5.2
+    },
+    "thin": {
+     "width": 10.0,
+     "thickness": 3.2
+    }
+   },
+   "M8": {
+    "pitch": 1.25,
+    "normal": {
+     "width": 13.0,
+     "thickness": 6.8
+    },
+    "thin": {
+     "width": 13.0,
+     "thickness": 4.0
+    }
+   },
+   "M10": {
+    "pitch": 1.5,
+    "normal": {
+     "width": 16.0,
+     "thickness": 8.4
+    },
+    "thin": {
+     "width": 16.0,
+     "thickness": 5.0
+    }
+   },
+   "M12": {
+    "pitch": 1.75,
+    "normal": {
+     "width": 18.0,
+     "thickness": 10.8
+    },
+    "thin": {
+     "width": 18.0,
+     "thickness": 6.0
+    }
+   },
+   "#2-56": {
+    "pitch": 0.45357,
+    "normal": {
+     "width": 4.7625,
+     "thickness": 1.5875
+    }
+   },
+   "#4-40": {
+    "pitch": 0.635,
+    "normal": {
+     "width": 6.35,
+     "thickness": 2.3813
+    }
+   },
+   "#6-32": {
+    "pitch": 0.79375,
+    "normal": {
+     "width": 7.9375,
+     "thickness": 2.7781
+    }
+   },
+   "#8-32": {
+    "pitch": 0.79375,
+    "normal": {
+     "width": 8.7312,
+     "thickness": 3.175
+    }
+   },
+   "#10-24": {
+    "pitch": 1.05833,
+    "normal": {
+     "width": 9.525,
+     "thickness": 3.175
+    }
+   },
+   "#10-32": {
+    "pitch": 0.79375,
+    "normal": {
+     "width": 9.525,
+     "thickness": 3.175
+    }
+   },
+   "1/4-20": {
+    "pitch": 1.27,
+    "normal": {
+     "width": 11.1125,
+     "thickness": 5.5563
+    },
+    "thin": {
+     "width": 9.525,
+     "thickness": 3.9688
+    }
+   },
+   "5/16-18": {
+    "pitch": 1.41111,
+    "normal": {
+     "width": 12.7,
+     "thickness": 6.7469
+    },
+    "thin": {
+     "width": 12.7,
+     "thickness": 4.7625
+    }
+   },
+   "3/8-16": {
+    "pitch": 1.5875,
+    "normal": {
+     "width": 14.2875,
+     "thickness": 7.9375
+    },
+    "thin": {
+     "width": 14.2875,
+     "thickness": 5.5563
+    }
+   },
+   "1/2-13": {
+    "pitch": 1.95385,
+    "normal": {
+     "width": 19.05,
+     "thickness": 11.1125
+    },
+    "thin": {
+     "width": 19.05,
+     "thickness": 7.9375
+    }
+   }
+  }
+ },
+ "heads": {
+  "source": "BOSL2 screws.scad nut_info() and screw_info() (ISO 4032 / ASME B18.6.3 & B18.2.2 tables inside BOSL2), extracted by running OpenSCAD",
+  "sizes": {
+   "#8-32": {
+    "flat": {
+     "head_d": 7.58647,
+     "head_h": null
+    },
+    "socket": {
+     "head_d": 6.858,
+     "head_h": 4.1656
+    },
+    "pan": {
+     "head_d": 8.1788,
+     "head_h": 2.921
+    },
+    "hex": {
+     "head_d": 6.35,
+     "head_h": 2.77812
+    },
+    "button": {
+     "head_d": 7.9248,
+     "head_h": 2.2098
+    }
+   },
+   "#6-32": {
+    "button": {
+     "head_d": 6.6548,
+     "head_h": 1.8542
+    },
+    "hex": {
+     "head_d": 6.35,
+     "head_h": 2.38125
+    },
+    "socket": {
+     "head_d": 5.7404,
+     "head_h": 3.5052
+    },
+    "pan": {
+     "head_d": 6.858,
+     "head_h": 2.4638
+    },
+    "flat": {
+     "head_d": 6.35152,
+     "head_h": null
+    }
+   },
+   "M5": {
+    "flat": {
+     "head_d": 9.12,
+     "head_h": null
+    },
+    "hex": {
+     "head_d": 8.0,
+     "head_h": 3.5
+    },
+    "button": {
+     "head_d": 9.5,
+     "head_h": 2.75
+    },
+    "cheese": {
+     "head_d": 8.5,
+     "head_h": 3.3
+    },
+    "pan": {
+     "head_d": 9.5,
+     "head_h": 3.8
+    },
+    "socket": {
+     "head_d": 8.5,
+     "head_h": 5.0
+    }
+   },
+   "#2-56": {
+    "hex": {
+     "head_d": 3.175,
+     "head_h": 1.5875
+    },
+    "pan": {
+     "head_d": 4.2418,
+     "head_h": 1.6002
+    },
+    "flat": {
+     "head_d": 3.88163,
+     "head_h": null
+    },
+    "button": {
+     "head_d": 4.1656,
+     "head_h": 1.1684
+    },
+    "socket": {
+     "head_d": 3.57187,
+     "head_h": 2.1844
+    }
+   },
+   "1/2-13": {
+    "hex": {
+     "head_d": 19.05,
+     "head_h": 8.73125
+    },
+    "flat": {
+     "head_d": 20.066,
+     "head_h": null
+    },
+    "button": {
+     "head_d": 22.225,
+     "head_h": 6.731
+    },
+    "socket": {
+     "head_d": 19.05,
+     "head_h": 12.7
+    }
+   },
+   "#4-40": {
+    "hex": {
+     "head_d": 4.7625,
+     "head_h": 1.5875
+    },
+    "button": {
+     "head_d": 5.4102,
+     "head_h": 1.4986
+    },
+    "pan": {
+     "head_d": 5.5626,
+     "head_h": 2.032
+    },
+    "socket": {
+     "head_d": 4.6482,
+     "head_h": 2.8448
+    },
+    "flat": {
+     "head_d": 5.11658,
+     "head_h": null
+    }
+   },
+   "#10-24": {
+    "button": {
+     "head_d": 9.1694,
+     "head_h": 2.5654
+    },
+    "pan": {
+     "head_d": 9.4742,
+     "head_h": 3.3782
+    },
+    "flat": {
+     "head_d": 8.82142,
+     "head_h": null
+    },
+    "socket": {
+     "head_d": 7.9375,
+     "head_h": 4.826
+    },
+    "hex": {
+     "head_d": 7.9375,
+     "head_h": 3.175
+    }
+   },
+   "#10-32": {
+    "hex": {
+     "head_d": 7.9375,
+     "head_h": 3.175
+    },
+    "socket": {
+     "head_d": 7.9375,
+     "head_h": 4.826
+    },
+    "pan": {
+     "head_d": 9.4742,
+     "head_h": 3.3782
+    },
+    "button": {
+     "head_d": 9.1694,
+     "head_h": 2.5654
+    },
+    "flat": {
+     "head_d": 8.82142,
+     "head_h": null
+    }
+   },
+   "M6": {
+    "flat": {
+     "head_d": 11.085,
+     "head_h": null
+    },
+    "pan": {
+     "head_d": 12.0,
+     "head_h": 4.6
+    },
+    "cheese": {
+     "head_d": 10.0,
+     "head_h": 3.9
+    },
+    "socket": {
+     "head_d": 10.0,
+     "head_h": 6.0
+    },
+    "button": {
+     "head_d": 10.5,
+     "head_h": 3.3
+    },
+    "hex": {
+     "head_d": 10.0,
+     "head_h": 4.0
+    }
+   },
+   "M10": {
+    "cheese": {
+     "head_d": 16.0,
+     "head_h": 6.0
+    },
+    "hex": {
+     "head_d": 17.0,
+     "head_h": 6.4
+    },
+    "pan": {
+     "head_d": 20.0,
+     "head_h": 7.5
+    },
+    "socket": {
+     "head_d": 16.0,
+     "head_h": 10.0
+    },
+    "flat": {
+     "head_d": 18.04,
+     "head_h": null
+    },
+    "button": {
+     "head_d": 17.5,
+     "head_h": 5.5
+    }
+   },
+   "5/16-18": {
+    "pan": {
+     "head_d": 15.621,
+     "head_h": 5.5372
+    },
+    "hex": {
+     "head_d": 12.7,
+     "head_h": 5.15937
+    },
+    "button": {
+     "head_d": 13.8938,
+     "head_h": 4.2164
+    },
+    "flat": {
+     "head_d": 14.6399,
+     "head_h": null
+    },
+    "socket": {
+     "head_d": 11.9063,
+     "head_h": 7.9375
+    }
+   },
+   "M3": {
+    "flat": {
+     "head_d": 5.35,
+     "head_h": null
+    },
+    "pan": {
+     "head_d": 5.6,
+     "head_h": 2.4
+    },
+    "socket": {
+     "head_d": 5.5,
+     "head_h": 3.0
+    },
+    "button": {
+     "head_d": 5.7,
+     "head_h": 1.65
+    },
+    "cheese": {
+     "head_d": 5.5,
+     "head_h": 2.0
+    }
+   },
+   "M8": {
+    "socket": {
+     "head_d": 13.0,
+     "head_h": 8.0
+    },
+    "button": {
+     "head_d": 14.0,
+     "head_h": 4.4
+    },
+    "hex": {
+     "head_d": 13.0,
+     "head_h": 5.3
+    },
+    "cheese": {
+     "head_d": 13.0,
+     "head_h": 5.0
+    },
+    "flat": {
+     "head_d": 15.585,
+     "head_h": null
+    },
+    "pan": {
+     "head_d": 16.0,
+     "head_h": 6.0
+    }
+   },
+   "M2": {
+    "pan": {
+     "head_d": 4.0,
+     "head_h": 1.6
+    },
+    "cheese": {
+     "head_d": 3.8,
+     "head_h": 1.3
+    },
+    "socket": {
+     "head_d": 3.8,
+     "head_h": 2.0
+    },
+    "button": {
+     "head_d": 3.5,
+     "head_h": 1.3
+    },
+    "flat": {
+     "head_d": 3.65,
+     "head_h": null
+    }
+   },
+   "M2.5": {
+    "pan": {
+     "head_d": 5.0,
+     "head_h": 2.0
+    },
+    "socket": {
+     "head_d": 4.5,
+     "head_h": 2.5
+    },
+    "button": {
+     "head_d": 4.6,
+     "head_h": 1.5
+    },
+    "flat": {
+     "head_d": 4.55,
+     "head_h": null
+    },
+    "cheese": {
+     "head_d": 4.5,
+     "head_h": 1.6
+    }
+   },
+   "1/4-20": {
+    "hex": {
+     "head_d": 11.1125,
+     "head_h": 3.96875
+    },
+    "pan": {
+     "head_d": 12.4968,
+     "head_h": 4.445
+    },
+    "flat": {
+     "head_d": 11.6713,
+     "head_h": null
+    },
+    "button": {
+     "head_d": 11.0998,
+     "head_h": 3.3528
+    },
+    "socket": {
+     "head_d": 9.525,
+     "head_h": 6.35
+    }
+   },
+   "M12": {
+    "button": {
+     "head_d": 21.0,
+     "head_h": 6.6
+    },
+    "flat": {
+     "head_d": 21.75,
+     "head_h": null
+    },
+    "socket": {
+     "head_d": 18.0,
+     "head_h": 12.0
+    },
+    "hex": {
+     "head_d": 19.0,
+     "head_h": 7.5
+    }
+   },
+   "M4": {
+    "cheese": {
+     "head_d": 7.0,
+     "head_h": 2.6
+    },
+    "socket": {
+     "head_d": 7.0,
+     "head_h": 4.0
+    },
+    "button": {
+     "head_d": 7.6,
+     "head_h": 2.2
+    },
+    "pan": {
+     "head_d": 8.0,
+     "head_h": 3.1
+    },
+    "flat": {
+     "head_d": 8.22,
+     "head_h": null
+    }
+   },
+   "3/8-16": {
+    "hex": {
+     "head_d": 14.2875,
+     "head_h": 6.35
+    },
+    "flat": {
+     "head_d": 17.6086,
+     "head_h": null
+    },
+    "pan": {
+     "head_d": 18.796,
+     "head_h": 6.6294
+    },
+    "button": {
+     "head_d": 16.6624,
+     "head_h": 5.0546
+    },
+    "socket": {
+     "head_d": 14.2875,
+     "head_h": 9.525
+    }
+   }
+  }
+ },
+ "notes": "Per-size length lists: each metric size has 'standard' (ISO series) and 'common_extra' (commercially listed, not in the ISO series). Metric capped at 100 mm, inch at 4 in. ISO 4762 screws longer than roughly b ref + a few mm are partially threaded (b ref M3 18, M4 20, M5 22, M6 24, M8 28, M10 32, M12 36 mm per engineersedge) - model thread length accordingly. ISO 7380 and ISO 4017 are fully threaded. ISO 10642 'standard' lengths are unsourced (DIN 7991 commercial lengths given instead). ASME lengths are one supplier's stock, not a standard. Data was extracted through a fetch tool that renders pages to text; fasten.it mass tables lose column alignment, so size/length membership there was reconstructed from mass progression and should be spot-checked if critical."
+}

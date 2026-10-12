@@ -52,6 +52,10 @@ and in Claude Code.
 - **Viewer:** a self-contained HTML page with touch controls, a parts table
   with show and see-through toggles for each part, a pull-apart slider, a cut
   plane, tap-to-measure and a variant switcher.
+- **Standard hardware:** screws, nuts, washers, bearings, gears and NEMA motors from
+  the ISO and ASME tables (metric and inch), with holes that match. A length picker
+  chooses screw lengths you can actually buy for a joint, and `--bom` lists bought and
+  made parts.
 - **Smooth blends:** `lib/loft.scad` builds a revolved solid whose profile can
   change with angle. Use it for grips and thumb dishes that fade in without a
   crease.
@@ -107,8 +111,11 @@ Be aware of this before using it. On first use the skill may install:
   sections and wall thickness.
 - `cadquery` from PyPI, only when STEP export is requested. It is a large
   download, about 165 MB installed.
+- BOSL2 v2.0.768 from GitHub (`bash scripts/get_bosl2.sh`, about 6 MB) into
+  OpenSCAD's user library folder, only for models that use it or the hardware
+  layer.
 
-The viewer page loads three.js from cdnjs and a font from Google Fonts. It
+The viewer page loads three.js from cdnjs, pinned with an integrity hash. It
 makes no other network requests.
 
 ## Using it
@@ -185,7 +192,8 @@ checks then pass.
   content security policy blocks any other request. No fonts or trackers load.
 - **Pinned engine.** `setup.sh` installs `openscad-wasm-prebuilt@1.2.0` without
   running install scripts, checks its hash against the one in the script, and
-  removes it if they differ.
+  removes it if they differ. `get_bosl2.sh` fetches BOSL2 at a fixed release and
+  checks its commit.
 - **Python packages** (numpy, manifold3d, scipy, pillow, and cadquery for STEP) come
   from PyPI within tested version ranges. They are not hash-pinned. In a locked-down
   environment, install them yourself first and the scripts will use them.
