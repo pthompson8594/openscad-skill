@@ -4,7 +4,10 @@
 
 A Claude skill for designing parts and multi-part assemblies in OpenSCAD.
 It checks its work with numbers instead of pictures, which keeps token use low
-and catches errors a render cannot show.
+and catches errors a render cannot show. Designs are built around parts you can
+buy: real screws in lengths that exist, the nuts, washers, bearings, gears and
+motors that go with them, and holes sized to the standards, so what it models can
+actually be put together.
 
 It runs in a normal Claude chat with code execution, including from a phone,
 and in Claude Code.
@@ -21,6 +24,21 @@ and in Claude Code.
   A single command exports every part in parallel, re-renders only parts whose
   geometry changed, and prints a line only for the parts that changed. It also
   flags open or non-manifold meshes and OpenSCAD warnings.
+- **Off-the-shelf hardware:** screws (socket, button, countersunk, hex), nuts,
+  washers, ball bearings, spur gears and racks, and NEMA stepper motors, in metric
+  and inch sizes, from the ISO and ASME tables in BOSL2. Each screw comes with a
+  matching clearance hole (close, normal or loose fit to ISO 273), counterbore or
+  nut trap, placed so the screw and its hole line up. Gears are spaced and their
+  teeth phased so a pair meshes, with backlash for printed gears.
+- **Screw lengths you can buy:** a length picker lists the lengths sold for a size
+  and chooses one for a joint, so the design is built around a real screw instead
+  of a number that doesn't exist. Through a nut, it takes the shortest length that
+  leaves two threads past it (washers counted). Into a tapped hole or heat-set
+  insert, it takes the longest that won't bottom out and reports the thread
+  engagement. When the nearest size misses, it says what to change. A model can
+  ask for the length itself, so changing a plate's thickness changes the screw.
+- **Bill of materials:** every bundle includes a parts list of bought hardware and
+  made parts with quantities, ready to order from.
 - **Collision check:** tests every pair of parts and reports each overlap with
   its depth and location, plus gaps under a clearance you choose.
 - **Checks that stay checked:** a `checks` table of clearances (">= 0.3 mm",
@@ -52,10 +70,6 @@ and in Claude Code.
 - **Viewer:** a self-contained HTML page with touch controls, a parts table
   with show and see-through toggles for each part, a pull-apart slider, a cut
   plane, tap-to-measure and a variant switcher.
-- **Standard hardware:** screws, nuts, washers, bearings, gears and NEMA motors from
-  the ISO and ASME tables (metric and inch), with holes that match. A length picker
-  chooses screw lengths you can actually buy for a joint, and `--bom` lists bought and
-  made parts.
 - **Smooth blends:** `lib/loft.scad` builds a revolved solid whose profile can
   change with angle. Use it for grips and thumb dishes that fade in without a
   crease.
@@ -150,6 +164,36 @@ Run the scripts through `bash` or `python3` as shown. When a skill is uploaded
 to Claude, its files lose the executable bit, so `./scripts/setup.sh` gives
 "Permission denied".
 
+### Building around real hardware
+
+Ask for the joint and the skill picks the part, for example "hold the motor on
+with M3 screws" or "bolt these two plates with #8-32 and nuts". Before modelling,
+it checks which lengths exist:
+
+```
+$ python3 openscad/scripts/hardware.py lengths M3
+M3 socket: 5 mm, 6 mm, 8 mm, 10 mm, 12 mm, 16 mm, 18 mm*, 20 mm, 25 mm, 30 mm
+$ python3 openscad/scripts/hardware.py pick M3 --grip 9.5 --nut
+use M3 16 mm - 4.1 mm past the normal nut (2.4 mm thick)
+   or M3 12 mm: only 0.1 mm past the nut (less than 2 threads) - fine if it can't loosen
+$ python3 openscad/scripts/hardware.py pick "#8-32" --grip 12 --nut --washers 1
+use #8-32 3/4" - 2.63 mm (about 7/64") past the normal nut (3.17 mm (1/8") thick), 1 washer 1.24 mm (3/64") each
+$ python3 openscad/scripts/hardware.py pick M3 --grip 6 --into 8
+use M3 12 mm - engages 6 mm of the 8 mm available, 2 mm short of the bottom
+```
+
+In the model, the parts and their holes come from one library:
+
+```scad
+include <hardware.scad>
+l = hw_screw_len("M3", plate_t + 4);               // shortest real M3 that reaches
+translate([x, y, plate_t]) hw_screw(hw_spec("M3", l));
+translate([x, y, plate_t]) hw_screw_hole("M3,20", counterbore = 3.5);
+hw_nut("M3");  hw_washer("1/4", "uss");  hw_bearing("608");  hw_nema(17);
+```
+
+`asm.py --bom` writes `model_bom.csv`, which lists what to buy and what to make.
+
 `examples/box.scad` is a small five-sheet box to try it on, and
 `examples/channel.scad` is a folded channel with three bends.
 `examples/knob.scad` is a moving joystick knob with two top variants and a
@@ -157,6 +201,9 @@ TPU grip ring. Run it with `--clash --travel --section y=0 --walls --print`.
 It contains a deliberate fault: at 3° of tilt the knob hits the board,
 because 0.4 mm of gap is too little. Setting `gap = 1.2` fixes it, and the
 checks then pass.
+`examples/gearstage.scad` mounts a NEMA 17 motor on a printed plate with real
+M3 screws, drives a 40-tooth gear on a 608 bearing, and writes its parts list.
+Run it with `--clash --check --bom`.
 
 ## Limits
 
@@ -176,8 +223,17 @@ checks then pass.
 - 3MF files carry body names, colours and material names. Assign the actual
   filaments in the slicer.
 - Hole alignment only covers holes in the sheets you model. Patterns on bought
-  hardware (power supplies, fans, motherboards) must be looked up from a
-  dimensioned source and checked against the real part.
+  hardware not in the library (power supplies, fans, motherboards) must be looked
+  up from a dimensioned source and checked against the real part.
+- The hardware library covers screws, nuts, washers, bearings, spur gears, racks
+  and NEMA motors. Sprockets, chain, belts and pulleys are not in it yet.
+- Metric lengths follow the ISO series plus a few commonly stocked sizes (marked).
+  Countersunk lengths follow DIN 7991, as ISO 10642 has no public length list.
+  Inch lengths are one stockist's range, not a standard, so check your supplier.
+- BOSL2 has no M2 to M4 hex-head screws; `hardware.py sizes` lists the heads each
+  size has. Its close-fit M3 hole is 3.15 mm, where ISO 273 says 3.2 mm.
+- Thread engagement advice is a rule of thumb (about one diameter in steel, twice
+  that in aluminium or plastic), not a strength calculation.
 - The cut and STEP files have not been run on a real machine yet. Open them in your own
   software and cut a test piece first.
 - Tested on Linux with OpenSCAD 2021.01 and the 2025.01 WebAssembly build.
