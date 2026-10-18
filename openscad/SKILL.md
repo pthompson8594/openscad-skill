@@ -32,7 +32,7 @@ Parametric `.scad` → STL + numbers. 1 unit = 1 mm.
 - `$fn`: 64 iterating, 128+ final curves, 32 small holes.
 - `difference()`: first child is the body. Overshoot cuts (`h+0.2` at `z=-0.1`).
 - **Never put a cutter face tangent to a curved surface or on the same radius as a profile** (e.g. a cube face at `y = r` against a cylinder of radius `r`) — it leaves an open or non-manifold mesh that other tools reject. Offset ≥ 0.5 mm. Solids touching only along an edge give `NON-MANIFOLD`: overlap them or separate them.
-- FDM fits (on diameter): slide +0.2, press +0.1, free +0.4; M3 clearance 3.4 mm; M3 heat-set 4.0 × 5 deep. Walls ≥ 1.2; >45° overhang needs support; `minkowski()`/`hull()` are slow.
+- FDM fits (on diameter): slide +0.2, press +0.1, free +0.4; M3 clearance 3.4 mm. Walls ≥ 1.2; >45° overhang needs support; `minkowski()`/`hull()` are slow.
 - `cube()` is corner-at-origin; pass `center=true` deliberately.
 - **Fasteners:** for every screw/nut, state which side the driver comes from and at which assembly step; check it is still reachable after parts that go on later (springs, boards, glued inlays). No check catches this.
 - **Freeform blends:** a CSG cutter leaves a crease where it meets the surface. For a feature that must fade in smoothly (thumb dish, grip), copy `lib/loft.scad` beside the model and displace the profile instead:
@@ -63,7 +63,7 @@ threaded_rod(d=10, l=20, pitch=1.5);
 
 ## Hardware (screws, nuts, washers, bearings, gears, NEMA motors)
 
-Never draw bought parts from remembered sizes. `include <hardware.scad>` (needs BOSL2; the scripts find the file, bundles carry it; `include`, not `use`) gives ISO/ASME parts that match their holes:
+Never draw bought parts from remembered sizes. Parts with no standard (heat-set inserts, magnets, springs, PCBs, anything brand-specific): ask the user for the part number or datasheet before putting it in the assembly, and record it in the part's note. `include <hardware.scad>` (needs BOSL2; the scripts find the file, bundles carry it; `include`, not `use`) gives ISO/ASME parts that match their holes:
 
 ```scad
 include <hardware.scad>

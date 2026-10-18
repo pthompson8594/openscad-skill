@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.3.0 - unreleased
+
+- **Ask for parts that have no standard.** For heat-set inserts, magnets, springs,
+  boards and other brand-specific parts, the skill now asks for the part number or
+  datasheet before modelling them, instead of using a remembered size. The fixed
+  heat-set insert size in the printing tips was removed for the same reason.
+
 ## 2.2.0 - 2026-10-12
 
 - **Hardware layer.** `include <hardware.scad>` gives standard bought parts built from
