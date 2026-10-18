@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.3.0 - unreleased
+## 2.3.0 - 2026-10-18
 
 - **Ask for parts that have no standard.** For heat-set inserts, magnets, springs,
   boards and other brand-specific parts, the skill now asks for the part number or
