@@ -31,7 +31,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OSCAD = os.path.join(HERE, "oscad.sh")
 
 
-PINS = {"numpy": "numpy>=1.24,<3", "manifold3d": "manifold3d>=3.0,<4", "scipy": "scipy>=1.10,<2", "pillow": "pillow>=10.1,<13", "cadquery": "cadquery>=2.4,<3"}
+PINS = {"matplotlib": "matplotlib>=3.6,<4", "ezdxf": "ezdxf>=1.1,<2", "numpy": "numpy>=1.24,<3", "manifold3d": "manifold3d>=3.0,<4", "scipy": "scipy>=1.10,<2", "pillow": "pillow>=10.1,<13", "cadquery": "cadquery>=2.4,<3"}
 
 
 def need(mod, pipname=None):
@@ -173,7 +173,7 @@ def hash_files(files, extra=""):
 
 
 # ----------------------------------------------------------- tables ----------
-TABLES = ["parts", "bends", "k_factor", "checks", "travel", "report", "variants", "variant"]
+TABLES = ["parts", "bends", "k_factor", "checks", "travel", "report", "variants", "variant", "drawing"]
 
 
 def scad_to_json(s):
@@ -1205,7 +1205,7 @@ def defuse(base):
     gone = []
     for f in os.listdir(d):
         q = os.path.join(d, f)
-        ours = f == b + ".html" or (f.startswith(b + "_") and (f.endswith((".zip", ".png", "_bom.csv")) or f[len(b) + 1:] in ("parts", "print", "cut", "step"))) or f.startswith(".asm_eval_")
+        ours = f == b + ".html" or (f.startswith(b + "_") and (f.endswith((".zip", ".png", "_bom.csv")) or f[len(b) + 1:] in ("parts", "print", "cut", "step", "drawings"))) or f.startswith(".asm_eval_")
         if not ours:
             continue
         if os.path.islink(q):
@@ -1784,6 +1784,57 @@ def cut(parts, cutdir, rev, scad):
         say("cut: not flat, skipped: " + ", ".join(skipped))
 
 
+def drawings(parts, rows, want, ddir, rev, scad, kf):
+    if m3() is None or need("matplotlib") is None or need("ezdxf") is None:
+        say("drawings: needs manifold3d, matplotlib and ezdxf (pip install), skipped")
+        return
+    import drawing as D
+    rows = [r for r in (rows or []) if isinstance(r, list) and r and isinstance(r[0], str)]
+    for r in rows:
+        if r[0] not in ("sheet", "hole", "dim"):
+            say("drawing: row %s ignored - rows start with \"sheet\", \"hole\" or \"dim\"" % json.dumps(r)[:80])
+    opts = {}
+    for r in rows:
+        if r[0] == "sheet" and len(r) >= 2:
+            o = opts.setdefault(str(r[1]), {})
+            for x in r[2:]:
+                if isinstance(x, str) and "=" in x:
+                    k, _, v = x.partition("=")
+                    o[k.strip()] = BIDI.sub("", v.strip())[:200]
+    made = [p for p in parts if not p["hw"] and manifold(p) is not None]
+    if want:
+        ids = want
+    elif opts:
+        ids = list(opts)
+    else:
+        ids = [p["id"] for p in made]
+    sel = [p for p in made if p["id"] in ids]
+    miss = [i for i in ids if i not in {p["id"] for p in made}]
+    if miss:
+        say("drawings: no made part called %s" % ", ".join(miss))
+    if not sel:
+        return
+    inside(ddir, os.path.dirname(os.path.abspath(scad)))
+    if os.path.isdir(ddir):
+        for f in os.listdir(ddir):
+            q = os.path.join(ddir, f)
+            if os.path.isfile(q) and not os.path.islink(q) and (f == "MANIFEST.txt" or f.endswith((".pdf", ".dxf", "_preview.png"))):
+                os.remove(q)
+    os.makedirs(ddir, exist_ok=True)
+    flats = {}
+    for p in sel:
+        fl = p["stl"][:-4] + ".flat.stl"
+        if p.get("bends") and os.path.exists(fl):
+            flats[p["id"]] = weld(read_stl(fl))
+    fits = json.load(open(os.path.join(os.path.dirname(HERE), "lib", "fits.json")))["classes"]
+    model = os.path.splitext(os.path.basename(scad))[0]
+    for l in D.make(sel, rows, opts, ddir, model, rev, fits, kf, flats):
+        say(l)
+    manifest(ddir, rev, scad)
+    say("drawings: %d sheet%s -> %s (rev %s); a low-resolution <Label>_preview.png of each, to look at once before sending" % (
+        len(sel), "" if len(sel) == 1 else "s", ddir, rev))
+
+
 def holes(parts, gap, dmax=30):
     hs = []
     for p in parts:
@@ -1852,6 +1903,27 @@ def html(sets, path, title, rev=""):
 
 
 # ------------------------------------------------------------ selftest -------
+DRAWSELF = """include <fits.scad>
+use <sheet.scad>
+part = "all";
+t = 8;
+flat = false;
+parts = [ ["plate","Plate","6061-T6"], ["shaft","Shaft"], ["tab","Tab","2 mm steel","mat=S235"] ];
+report = [ ["h7max", fit_max("H7", 22)] ];
+bends = [ ["tab", 0,20, 40,20, 90, 2, -1] ];
+drawing = [ ["sheet","plate","section=y=0","finish=Anodise clear"], ["hole","plate",22,"H7"], ["hole","plate",2.5,"M3-6H ↧6"],
+            ["hole","shaft",8,"g6"], ["dim","plate","front",[-25,-25,0],[-25,-25,8],"v","±0.05"], ["sheet","shaft"], ["sheet","tab"] ];
+module pick(n){ if(part=="all"||part==n) children(); }
+pick("plate") difference(){
+  translate([-25,-25,0]) cube([70,50,t]);
+  translate([0,0,-1]) cylinder(d=22,h=t+2,$fn=96);
+  for (x=[-15,15], y=[-15,15]) translate([x,y,0]) { translate([0,0,-1]) cylinder(d=3.4,h=t+2,$fn=40); translate([0,0,t-3]) cylinder(d=6.5,h=4,$fn=48); }
+  for (y=[-12,12]) translate([32,y,t-6]) cylinder(d=2.5,h=7,$fn=32);
+}
+pick("shaft") translate([0,60,0]) { cylinder(d=8,h=30,$fn=96); cylinder(d=12,h=4,$fn=96); }
+pick("tab") fold(bends_of(bends,"tab"), 2, 0.4, flat) difference(){ square([40,45]); translate([20,10]) circle(d=5,$fn=40); }
+"""
+
 STOPSELF = """part = "all";
 w = 12;
 parts = [ ["base","Base"], ["blk","Slider","",[0,0,0],"group=s"], ["ring","Ring"], ["pins","Pins","",[0,0,0],"pieces=2"], ["arch","Arch"] ];
@@ -2111,6 +2183,35 @@ pick("l") translate([20,0,4.02]) cube([5,5,1]);
                 linked and lt.startswith("# slot design log") and lt.index("### slot_v1") < lt.index("### slot_v2") and "**Changed:** slot 1 mm wider" in lt
                 and "CHANGED Base (base)" in lt and "ring: PIECES" in lt and bool(zs2) and "slot_log.md" in zipfile.ZipFile(os.path.join(sd2, zs2[0])).namelist()))
     res.append(("--brief leaves out per-part size lines but keeps problems", o7.split("against s1")[-1].count("| vol") == 0 and o7.count("ring: PIECES") >= 3))
+    dd_ = os.path.join(d, "draw")
+    os.makedirs(dd_)
+    fd = os.path.join(dd_, "dw.scad")
+    open(fd, "w").write(DRAWSELF)
+    b9 = io.StringIO()
+    with contextlib.redirect_stdout(b9):
+        try:
+            main([fd, "--drawings", "--bundle"])
+        except SystemExit:
+            pass
+    o9 = b9.getvalue()
+    ddir = os.path.join(dd_, "dw_drawings")
+    dxf_ok = False
+    try:
+        import ezdxf
+        dxf_ok = all(len(ezdxf.readfile(os.path.join(ddir, f)).audit().errors) == 0 for f in os.listdir(ddir) if f.endswith(".dxf"))
+    except Exception:
+        dxf_ok = False
+    pdf = os.path.join(ddir, "dw_drawings.pdf")
+    pages = open(pdf, "rb").read().count(b"/Type /Page\n") + open(pdf, "rb").read().count(b"/Type /Page ") if os.path.exists(pdf) else 0
+    zd = [x for x in os.listdir(dd_) if x.endswith(".zip")]
+    res.append(("drawings: counterbores grouped, H7 hole with limits, tapped rule, shaft g6 with limits, stepped shaft",
+                "4× Ø3.4 THRU  ⌴Ø6.5 ↧3" in o9 and "Ø22 H7 (+0.021/0) THRU" in o9 and "2× M3-6H ↧6 (Ø2.5 ↧6)" in o9
+                and "Ø8 g6 (-0.005/-0.014)" in o9 and "Ø12" in o9))
+    res.append(("drawings: section on the plate, flat pattern on the bent tab, 3 sheets in PDF and clean DXFs, fits.scad, bundled",
+                "section A-A" in o9 and "flat pattern" in o9 and "flat pattern: Ø5 THRU" in o9 and pages >= 3 and dxf_ok and "report: h7max 22.021" in o9
+                and bool(zd) and any(n.endswith("dw_drawings.pdf") for n in zipfile.ZipFile(os.path.join(dd_, zd[0])).namelist())))
+    hf = subprocess.run([sys.executable, "-I", os.path.join(HERE, "hardware.py"), "fit", "22", "H7/g6"], capture_output=True, text=True).stdout
+    res.append(("hardware.py fit: 22 H7/g6 is a clearance fit of 0.007 to 0.041 mm", "H7/g6: clearance fit, 0.007 to 0.041 mm clearance" in hf))
     hp = subprocess.run([sys.executable, "-I", os.path.join(HERE, "hardware.py"), "pick", "M3", "--grip", "9.5", "--nut"], capture_output=True, text=True).stdout
     hi = subprocess.run([sys.executable, "-I", os.path.join(HERE, "hardware.py"), "pick", "#8-32", "--grip", "6", "--into", "8"], capture_output=True, text=True).stdout
     res.append(("hardware.py: M3 through 9.5 mm + nut picks 16 mm, offers 12; #8-32 into 8 mm fits", "use M3 16 mm" in hp and "or M3 12 mm" in hp and hi.startswith("use #8-32")))
@@ -2175,6 +2276,7 @@ def main(argv=None):
     ap.add_argument("--only", default="")
     ap.add_argument("--title", default="")
     ap.add_argument("--brief", action="store_true", help="only problems and one-line summaries")
+    ap.add_argument("--drawings", nargs="?", const="", default=None, help="ISO drawings (PDF + DXF) of made parts; optional list of ids")
     ap.add_argument("--log", default="", help="what changed in this version and why: appended to <project>_log.md with this run's results")
     ap.add_argument("--against", default="", help="earlier version of the model: list the parts that differ (what to reprint)")
     a = ap.parse_args(argv)
@@ -2185,8 +2287,8 @@ def main(argv=None):
         sys.exit("asm.py: no OpenSCAD found - run scripts/setup.sh")
     if a.against and os.path.abspath(a.against) == os.path.abspath(a.scad):
         sys.exit("asm.py: --against needs an earlier version of the model, not the model itself")
-    if a.only and (a.prnt or a.html or a.bundle or a.cut or a.step):
-        sys.exit("asm.py: --only checks a subset; --print/--html/--bundle/--cut/--step need every part - run them without --only")
+    if a.only and (a.prnt or a.html or a.bundle or a.cut or a.step or a.drawings is not None):
+        sys.exit("asm.py: --only checks a subset; --print/--html/--bundle/--cut/--step/--drawings need every part - run them without --only")
     sys.path.insert(0, HERE)
     import section as S
     for spec in a.section:
@@ -2259,6 +2361,8 @@ def main(argv=None):
             step(parts, inside(base + "_step" + sub, root_), rev, a.scad)
         if a.prnt or a.bundle:
             print_set(parts, base + "_print" + sub, rev, a.scad, colours(parts))
+        if a.drawings is not None:
+            drawings(parts, t.get("drawing"), [x for x in a.drawings.split(",") if x], inside(base + "_drawings" + sub, root_), rev, a.scad, kf)
         if a.bom or a.bundle:
             bom(parts, inside(base + sub.replace(os.sep, "_") + "_bom.csv", os.path.dirname(os.path.abspath(a.scad))))
         sets.append((v, parts))
@@ -2290,7 +2394,7 @@ def main(argv=None):
                     continue
                 zf.write(f, os.path.relpath(f, root))
             stale = []
-            for d in (base + "_print", base + "_cut", base + "_step"):
+            for d in (base + "_print", base + "_cut", base + "_step", base + "_drawings"):
                 for dp, _, fns in os.walk(d):
                     mf = os.path.join(dp, "MANIFEST.txt")
                     if not fns:
@@ -2301,7 +2405,7 @@ def main(argv=None):
                     got.add(os.path.basename(d).rsplit("_", 1)[-1])
                     for fn in sorted(fns):
                         q = os.path.join(dp, fn)
-                        if os.path.islink(q) or not os.path.isfile(q):
+                        if os.path.islink(q) or not os.path.isfile(q) or fn.endswith("_preview.png"):
                             continue
                         zf.write(q, os.path.relpath(q, root))
             zf.write(base + ".html", os.path.basename(base) + ".html")
@@ -2311,7 +2415,7 @@ def main(argv=None):
             lp = log_path(a.scad)[0]
             if os.path.isfile(lp) and not os.path.islink(lp) and os.stat(lp).st_nlink == 1:
                 zf.write(lp, os.path.basename(lp))
-        say("bundle: %s (model + %s + viewer, all rev %s; hardware left out)" % (z, " + ".join({"print": "print files", "cut": "cut files", "step": "STEP files"}[k] for k in ("print", "cut", "step") if k in got) or "no fabrication files", rev))
+        say("bundle: %s (model + %s + viewer, all rev %s; hardware left out)" % (z, " + ".join({"print": "print files", "cut": "cut files", "step": "STEP files", "drawings": "drawings"}[k] for k in ("print", "cut", "step", "drawings") if k in got) or "no fabrication files", rev))
         if old:
             say("bundle: removed older bundle%s %s so only the current one can be sent" % ("s" if len(old) > 1 else "", ", ".join(old)))
         if stale:

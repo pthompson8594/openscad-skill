@@ -2,6 +2,25 @@
 
 ## 2.4.0 - unreleased
 
+- **Manufacturing drawings.** `--drawings` makes an ISO drawing of each made part
+  as PDF and DXF: first-angle views with hidden lines and centre lines, an
+  isometric view, an optional section with hatching, coordinate dimensions, hole
+  callouts (count, diameter, through or depth, counterbore, countersink, far side,
+  threads and fits you name), shaft and boss diameters, a dimensioned flat pattern
+  with bend notes for sheet metal, and a title block with material, finish,
+  quantity, revision, scale and ISO 2768-mK general tolerances. Each run lists
+  every callout so they can be checked without opening the PDF. A `drawing` table
+  in the model adds what geometry can't say.
+- **ISO 286 fits.** `hardware.py fit 22 H7/g6` gives the limits and the clearance
+  or interference; `hardware.py fit 22` lists the preferred fits at a size.
+  `fits.scad` gives the same numbers inside a model (`fit_mid`, `fit_dev`, ...).
+  Tables come from cited sources and every row is checked against its ISO
+  tolerance grade.
+- **Smoother bends.** `fold()` now joins its bend slices along radial planes, so
+  bends no longer show small steps.
+- **Rounder hardware holes.** Screw holes, screws, nuts and washers from
+  `hardware.scad` get enough facets to read as circles (an M3 hole was a hexagon).
+
 From a 22-version build of a six-axis controller:
 
 - **Split parts are flagged.** Every run counts the separate solids in each made

@@ -14,23 +14,29 @@ include <BOSL2/ball_bearings.scad>
 include <BOSL2/gears.scad>
 include <BOSL2/nema_steppers.scad>
 include <hw_tables.scad>
+include <fits.scad>             // ISO 286 fits: fit_dev("H7", 22), fit_mid, fit_min, fit_max
 
 function _hw_cs(head) = is_string(head) && starts_with(head, "flat");
 
 // ---- screws, nuts, washers
+// round features get enough facets to read as circles (OpenSCAD's default makes an M3 hole a hexagon)
 module hw_screw(spec, head = "socket", thread = false, drive = "none") {
+  $fs = min($fs, 0.25); $fa = min($fa, 6);
   screw(spec, head = head, thread = thread, drive = drive, anchor = _hw_cs(head) ? "head_top" : "head_bot");
 }
 
 // hole for a screw in a printed or cut part; fit "close" | "normal" | "loose" = ISO 273 fine/medium/coarse
 // (ASME B18.2.8 for inch). Give a length longer than the material so it cuts clean through.
-// counterbore = depth of a head pocket above the seat (0 = none).
+// counterbore = depth of a head pocket above the seat (0 = none): put the seat that far below the surface,
+// e.g. translate([x, y, plate_t - 3.5]) hw_screw_hole("M3,20", counterbore = 3.5).
 module hw_screw_hole(spec, head = "socket", fit = "normal", counterbore = 0, thread = false) {
+  $fs = min($fs, 0.25); $fa = min($fa, 6);
   screw_hole(spec, head = _hw_cs(head) ? head : (counterbore > 0 ? head : "none"), thread = thread, tolerance = fit,
              counterbore = counterbore, anchor = _hw_cs(head) ? "head_top" : (counterbore > 0 ? "head_bot" : TOP));
 }
 
 module hw_nut(spec, thickness = "normal", shape = "hex", thread = false) {
+  $fs = min($fs, 0.25); $fa = min($fa, 6);
   nut(spec, shape = shape, thickness = thickness, thread = thread, anchor = BOT);
 }
 
@@ -46,8 +52,9 @@ function hw_washer_dims(size, series = "iso7089") =
   [r[0][2], r[0][3], r[0][4]];
 
 module hw_washer(size, series = "iso7089") {
+  $fs = min($fs, 0.25); $fa = min($fa, 6);
   w = hw_washer_dims(size, series);
-  difference() { cylinder(d = w[1], h = w[2], $fn = 48); translate([0, 0, -1]) cylinder(d = w[0], h = w[2] + 2, $fn = 32); }
+  difference() { cylinder(d = w[1], h = w[2]); translate([0, 0, -1]) cylinder(d = w[0], h = w[2] + 2); }
 }
 
 // ---- real lengths

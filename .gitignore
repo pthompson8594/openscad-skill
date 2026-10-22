@@ -12,3 +12,4 @@ __pycache__/
 *.3mf
 *_bom.csv
 *_log.md
+*_drawings/

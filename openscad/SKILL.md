@@ -32,7 +32,7 @@ Parametric `.scad` → STL + numbers. 1 unit = 1 mm.
 - `$fn`: 64 iterating, 128+ final curves, 32 small holes.
 - `difference()`: first child is the body. Overshoot cuts (`h+0.2` at `z=-0.1`).
 - **Never put a cutter face tangent to a curved surface or on the same radius as a profile** (e.g. a cube face at `y = r` against a cylinder of radius `r`) — it leaves an open or non-manifold mesh that other tools reject. Offset ≥ 0.5 mm. Solids touching only along an edge give `NON-MANIFOLD`: overlap them or separate them.
-- FDM fits (on diameter): slide +0.2, press +0.1, free +0.4; M3 clearance 3.4 mm. Walls ≥ 1.2; >45° overhang needs support; `minkowski()`/`hull()` are slow.
+- **Fits are ISO 286 classes**, whatever the process: `python3 scripts/hardware.py fit 22` lists the preferred fits at that size (H7/g6 sliding, H7/p6 press …) with their clearance, `fit 22 H7/g6` the limits. Model a fitted bore or shaft at the middle of its band (`include <fits.scad>` → `fit_mid("H7", 22)`; also `fit_dev`, `fit_min`, `fit_max`) and name the class in the `drawing` table. Keep models printer-agnostic: a printer's error belongs in the slicer (hole/XY compensation), not in the model. M3 clearance 3.4 mm (ISO 273 medium). Walls ≥ 1.2; >45° overhang needs support; `minkowski()`/`hull()` are slow.
 - `cube()` is corner-at-origin; pass `center=true` deliberately.
 - **Fasteners:** for every screw/nut, state which side the driver comes from and at which assembly step; check it is still reachable after parts that go on later (springs, boards, glued inlays). No check catches this.
 - **Freeform blends:** a CSG cutter leaves a crease where it meets the surface. For a feature that must fade in smoothly (thumb dish, grip), copy `lib/loft.scad` beside the model and displace the profile instead:
@@ -60,6 +60,21 @@ include <BOSL2/threading.scad>        // only when threading
 cuboid([30,20,10], rounding=2);       // filleted box, no minkowski
 threaded_rod(d=10, l=20, pitch=1.5);
 ```
+
+## Drawings (CNC, sheet metal, anything sent to a shop)
+
+`python3 scripts/asm.py model.scad --drawings [id,id]` → `model_drawings/<Label>.pdf` + `.dxf` per made part and `model_drawings.pdf` with every sheet; bundles carry them. ISO: first-angle projection, A4/A3 chosen with a standard scale, title block (material, finish, qty, the run's `rev`, date, scale, projection symbol), general tolerances ISO 2768-mK, notes. Automatic: front / from above / from left views (a view identical to another is dropped), hidden lines dashed, centre lines, isometric; coordinate dimensions from each view's lower-left corner for straight edges and hole centres, overall sizes otherwise; hole callouts grouped by count (`4× Ø3.4 THRU ⌴Ø6.5 ↧3`, blind depth, countersink, `FAR SIDE`), boss and shaft diameters; for bent parts the flat pattern with every hole and bend (`BEND 1: UP 90° R2`) dimensioned, formed views marked reference. The run prints every callout per sheet: check those numbers; look at one `<Label>_preview.png` before sending, since a drawing is for people (previews stay out of bundles). Ask the user for material, finish and quantity. Tell the drawing what geometry cannot:
+
+```scad
+drawing = [
+  ["sheet", "plate", "mat=EN AW-6061-T6", "finish=Anodise black", "qty=2", "section=y=0", "ra=3.2"],  // also views=, sheet=A3, tol=, notes=a;b, iso=no
+  ["hole", "plate", 22, "H7"],              // every Ø22 hole (or shaft) in that part: fit class, limits added
+  ["hole", "plate", 2.5, "M3-6H ↧6"],       // text for a tapped Ø2.5 hole; the measured drill is kept in brackets
+  ["dim", "plate", "front", [0,0,0], [0,0,8], "v", "±0.05"]   // a dimension you need, measured between two model points
+];
+```
+
+Limits: holes on sloped faces get no callout; curved and freeform shapes get overall sizes plus your `dim` rows; sizes come from the mesh (rounded, e.g. 3.41 → 3.4), so give round features enough facets. A CNC shop also wants a STEP file: only sheet parts export as true solids (`--step`); other OpenSCAD parts are faceted meshes.
 
 ## Hardware (screws, nuts, washers, bearings, gears, NEMA motors)
 
@@ -94,7 +109,7 @@ The memory of a project across turns and conversations is `<project>_log.md` bes
 
 ## Assemblies
 
-Tables near the top of the `.scad`, the single source every tool reads. Values may be expressions, but OpenSCAD reads top to bottom, so put the tables **after** the parameters and derived values they use (a table above them sees `undef`). `parts`, `checks`, `travel`, `report`, `variants`, `variant`, `bends`, `k_factor` and `part` are reserved names: don't use them for your own parameters (asm.py stops with a name-clash message).
+Tables near the top of the `.scad`, the single source every tool reads. Values may be expressions, but OpenSCAD reads top to bottom, so put the tables **after** the parameters and derived values they use (a table above them sees `undef`). `parts`, `checks`, `travel`, `report`, `variants`, `variant`, `bends`, `k_factor`, `drawing` and `part` are reserved names: don't use them for your own parameters (asm.py stops with a name-clash message).
 
 ```scad
 part = "all";
@@ -132,6 +147,7 @@ pick("base") base();
 - `--bundle` (implies `--print` and `--html`) zips model + print files + cut + step + viewer as `model_<rev>.zip` and deletes older bundles of the model; every output carries the same 7-character `rev`; outputs from an older rev are left out and named. Tell the user to upload the bundle, never loose files.
 - `--bom` → `model_bom.csv`: bought (`hw_`) and made parts with quantities.
 - `--against old.scad` (an earlier version beside it) lists each made part as `CHANGED` (what to reprint or recut, with why), the same, or the same shape only moved; bought parts that changed; parts only in the old version. Run it before telling the user what to reprint.
+- `--drawings [ids]` ISO drawings, see Drawings.
 - `--brief` prints only problems and one-line summaries (no per-part sizes, gaps or extents).
 - `--log "text"` appends a version entry to `<project>_log.md` (see Design log).
 - `--html [--title T]` → `model.html`: coloured touch viewer — parts table (show / see-through), pull-apart, cut plane (X/Y/Z slider, flip), tap two points to measure, variant switcher; move with two fingers or right/Shift-drag, zoom toward cursor or fingers, double-tap a part (or pick it and "Zoom to it") to inspect it up close, "Reset view" to come back. The assembly deliverable; present unviewed.
@@ -187,4 +203,4 @@ save_stl(part, "part.stl")
 
 ## Deliverables
 
-`.scad`, interactive `.html` viewer, which params to tweak, what to reprint (`--against`); printing: the `--print` folder (or `--bundle`); flat-pack: also the `--cut` files. Add a `--mark3d` viewer only when something needed the user's confirmation.
+`.scad`, interactive `.html` viewer, which params to tweak, what to reprint (`--against`); printing: the `--print` folder (or `--bundle`); flat-pack: also the `--cut` files; for a shop: `--drawings` (PDF + DXF). Add a `--mark3d` viewer only when something needed the user's confirmation.

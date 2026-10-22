@@ -37,6 +37,15 @@ and in Claude Code.
   insert, it takes the longest that won't bottom out and reports the thread
   engagement. When the nearest size misses, it says what to change. A model can
   ask for the length itself, so changing a plate's thickness changes the screw.
+- **Manufacturing drawings:** ISO drawings (first-angle projection, PDF and DXF)
+  for every made part: views with hidden lines, a section, an isometric view,
+  dimensions, hole callouts with counterbores, depths and threads, ISO 286 fits
+  with their limits, a flat pattern with bend notes for sheet metal, and a title
+  block with material, finish, quantity, revision and ISO 2768 general
+  tolerances.
+- **ISO fits:** pick a fit by name (H7/g6 sliding, H7/p6 press and so on) and the
+  skill gives its limits and clearance from the ISO 286 tables, models the part
+  to the middle of the band and puts the fit on the drawing.
 - **Bill of materials:** every bundle includes a parts list of bought hardware and
   made parts with quantities, ready to order from.
 - **Collision check:** tests every pair of parts and reports each overlap with
