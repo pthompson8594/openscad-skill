@@ -44,12 +44,20 @@ and in Claude Code.
 - **Checks that stay checked:** a `checks` table of clearances (">= 0.3 mm",
   "== 2.3 mm", "clear", "touch"). Every run prints only the ones that fail.
 - **Moving parts:** a `travel` table moves a group of parts to every limit of
-  its travel and tilt and reports any collision and the closest clearance.
+  its travel and tilt and reports any collision and the closest clearance. For
+  each direction it also finds what actually stops the motion and at what
+  distance, and says when nothing does.
 - **Sections:** a true 2D section of the whole assembly at any plane or angle,
-  one colour per part, with overlaps and gaps in that plane listed.
+  one colour per part, with overlaps and gaps in that plane listed. It can zoom
+  in on one part or a chosen area.
 - **Print files:** wall thickness, overhang area and the widest flat underside
-  per part; STLs oriented for printing and named by label; a 3MF per
+  per part, with each overhang that needs a bridge or support located in the
+  model; STLs oriented for printing and named by label; a 3MF per
   multi-material set with the bodies kept registered.
+- **Split parts caught:** every run counts the separate solids in each part, so
+  a cut that goes right through a part is flagged before it reaches the printer.
+- **What to reprint:** compared with an earlier version of the model, it lists
+  which parts changed and which are the same or only moved.
 - **Variants:** each value of a `variant` setting exports as its own set, and
   the viewer shows them side by side or one at a time.
 - **Dimension report:** a `report` table of key heights printed every run,

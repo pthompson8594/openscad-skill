@@ -63,15 +63,24 @@ np = need("numpy") or sys.exit("asm.py: needs numpy (pip install numpy)")
 
 STEEL = ["#5f6f80", "#74879a", "#8a9bb0", "#a7b4c2", "#4b5a6b", "#9fb0c2", "#c98a2b", "#d9dee4"]
 HW = ["#3f7d5a", "#b5533c", "#b98a3e", "#3b4047", "#2f5f8f", "#3f7fb5", "#6a6f78", "#7a5c8f"]
-TAGS = ("group", "print", "plate", "mat", "flex", "qty")
+TAGS = ("group", "print", "plate", "mat", "flex", "qty", "pieces")
 USERLIBS = [os.path.expanduser("~/.local/share/OpenSCAD/libraries"), os.path.expanduser("~/Documents/OpenSCAD/libraries")]
 PFX = [""]
 FAULTS = {"render": 0, "found": 0}
 IGNORE = set()
+META = {}
+
+
+BRIEF = [False]
+QUIET = re.compile(r"^(\S+: [0-9.]+ x [0-9.]+ x [0-9.]+ \| vol|unchanged: |parts: |gap \S+ ~ |   closest without overlap|   nothing within|"
+                   r"   same as |   same shape, only moved|   gap \S+ ~ |   \S+: [xyzuv]\[|   overhang .*: \.\.\.|bom: |print: \d+ files)")
 
 
 def say(*a):
-    print(PFX[0] + " ".join(str(x) for x in a))
+    line = " ".join(str(x) for x in a)
+    if BRIEF[0] and QUIET.match(line):
+        return
+    print(PFX[0] + line)
 
 
 # ---------------------------------------------------------------- engine ----
@@ -268,6 +277,10 @@ def parse_parts(rows):
             p["qty"] = max(1, int(p["tags"].get("qty", "1")))
         except ValueError:
             p["qty"] = 1
+        try:
+            p["pieces"] = max(1, int(p["tags"]["pieces"])) if "pieces" in p["tags"] else None
+        except ValueError:
+            p["pieces"] = None
         out.append(p)
     if bad:
         sys.exit("asm.py: part ids must be letters, digits, '_', '-' or '.', start with a letter or digit, and be at most 64 characters (they become file names): " + ", ".join(bad))
@@ -470,6 +483,9 @@ def report(parts, outdir, show_all, rendered):
             FAULTS["render"] += 1
             say("%s: NON-MANIFOLD (%d edges shared by more than 2 faces) - solids touching along an edge; overlap or separate them" % (p["id"], s["nonman"]))
         o = prev.get(p["id"])
+        if not p["hw"]:
+            s["pieces"] = o["pieces"] if o and o.get("hash") == s["hash"] and "pieces" in o else piece_count(p)
+            piece_note(p, s["pieces"], o.get("pieces") if o else None)
         size = " x ".join("%.1f" % (s["hi"][k] - s["lo"][k]) for k in range(3))
         sz = o and o["lo"] == s["lo"] and o["hi"] == s["hi"] and abs(o["vol"] - s["vol"]) < 0.5
         if o and not show_all and o.get("hash") == s["hash"]:
@@ -481,6 +497,28 @@ def report(parts, outdir, show_all, rendered):
         say("unchanged: %d parts (identical geometry)" % same)
     say("parts: %d rendered, %d from cache | engine: %s" % (rendered, len(parts) - rendered, engine().split(";")[0]))
     json.dump(cur, open(nf, "w"))
+
+
+def piece_count(p):
+    """separate solids in a part (touching solids count as one)"""
+    man = manifold(p)
+    if man is not None:
+        return max(1, len(man.decompose()))
+    return max(1, len(components(p["tri"])))
+
+
+def piece_note(p, n, was):
+    want = p.get("pieces")
+    if want is not None and n != want:
+        FAULTS["found"] += 1
+        say("%s: PIECES %d separate pieces, but pieces=%d says %d%s - a cut may have gone right through it, or two bodies no longer meet" % (
+            p["id"], n, want, want, " (was %d)" % was if was and was != n else ""))
+    elif want is None and n > 1:
+        FAULTS["found"] += 1
+        say("%s: PIECES %d separate pieces%s - check no cut has gone right through it; if it really is several pieces, tag it pieces=%d" % (
+            p["id"], n, " (was %d)" % was if was and was != n else "", n))
+    elif was and was != n:
+        say("%s: now %d piece%s (was %d)" % (p["id"], n, "" if n == 1 else "s", was))
 
 
 def fmt(v):
@@ -776,6 +814,7 @@ def travel_poses(parts, rows, only):
             bb = union([p["man"] for p in ms]).bounding_box()
             piv = [(bb[k] + bb[k + 3]) / 2 for k in range(3)]
         plist = []
+        META[label] = {"d": d, "q": q, "piv": piv}
         for n, t, rr in pose_list(d, q):
             def tf(m, t=t, rr=rr, piv=piv):
                 return m.translate([-piv[0], -piv[1], -piv[2]]).rotate(rr).translate([piv[0] + t[0], piv[1] + t[1], piv[2] + t[2]])
@@ -823,6 +862,83 @@ def travel(parts, poses, clear):
             say("   closest without overlap: %.2f mm (%s) at %s" % best)
         elif not hit:
             say("   nothing within %.1f mm at any pose" % max(clear, 1.0))
+        if label in META:
+            stops(label, mv, others, META[label])
+
+
+def stops(label, mv, others, meta, tol=0.01):
+    """for each direction of a travel row: how far the group moves before it first touches something, and what"""
+    if not mv or not others:
+        return
+    d, q, piv = meta["d"], meta["q"], meta["piv"]
+    bb = union([p["man"] for p in mv]).bounding_box()
+    rmax = max(math.dist(piv, (bb[i], bb[j], bb[k])) for i in (0, 3) for j in (1, 4) for k in (2, 5)) or 1.0
+    out, notes, none = [], [], {}
+    for kind, lims in (("t", d), ("r", q)):
+        for k in range(3):
+            if not lims[k]:
+                continue
+            for sg in (1, -1):
+                lim = abs(lims[k])
+                smax = lim * 1.5 + (0.5 if kind == "t" else 1.0)
+
+                def place(m, s, k=k, sg=sg, kind=kind):
+                    if kind == "t":
+                        v = [0, 0, 0]
+                        v[k] = sg * s
+                        return m.translate(v)
+                    r = [0, 0, 0]
+                    r[k] = sg * s
+                    return m.translate([-piv[0], -piv[1], -piv[2]]).rotate(r).translate(piv)
+                s, hitp, steps = 0.0, None, 0
+                while s <= smax and steps < 400:
+                    steps += 1
+                    rem = (smax - s) if kind == "t" else math.radians(smax - s) * rmax
+                    g, pair = rem + 1, None
+                    A = [(p, place(p["man"], s)) for p in mv]
+                    for p, Am in A:
+                        for o in others:
+                            if flex_pair(p, o) or bbox_far(Am, o["man"], min(rem, g) + tol):
+                                continue
+                            gg = Am.min_gap(o["man"], min(rem, g) + tol)
+                            if gg < g:
+                                g, pair = gg, (p["id"], o["id"])
+                    if pair is None or g > rem:
+                        s = smax + 1
+                        break
+                    if g > tol:
+                        adv = g * 0.95 if kind == "t" else math.degrees(g * 0.95 / rmax)
+                        s += max(adv, 0.002)
+                        continue
+                    probe = 0.05 if kind == "t" else math.degrees(0.05 / rmax)
+                    into = None
+                    for p, _ in A:
+                        Bm = place(p["man"], s + probe)
+                        for o in others:
+                            if not flex_pair(p, o) and not bbox_far(Bm, o["man"], 0.01) and (Bm ^ o["man"]).volume() > 1e-4:
+                                into = (p["id"], o["id"])
+                                break
+                        if into:
+                            break
+                    if into:
+                        hitp = into
+                        break
+                    s += probe
+                ax = ("%s%s" % ("+" if sg > 0 else "-", "xyz"[k])) if kind == "t" else ("%sr%s" % ("+" if sg > 0 else "-", "xyz"[k]))
+                unit = " mm" if kind == "t" else "°"
+                if hitp is None:
+                    out.append("%s none" % ax)
+                    none.setdefault((unit, smax, lim), []).append(ax)
+                    continue
+                out.append("%s %.2f%s %s~%s" % (ax, s, unit, hitp[0], hitp[1]))
+                if s > lim + max(0.05, 0.03 * lim):
+                    notes.append("   stop %s is %.2f%s past the travel (%g%s): %s~%s stops it at %.2f%s - the travel table may be short, or the stop is too far" % (
+                        ax, s - lim, unit, lim, unit, hitp[0], hitp[1], s, unit))
+    say("   stops: " + ", ".join(out))
+    for (unit, smax, lim), axs in none.items():
+        say("   NO STOP %s: nothing stops %s within %.3g%s (travel %g%s) - only springs or a hand limit it there" % (" ".join(axs), label, smax, unit, lim, unit))
+    for n in notes:
+        say(n)
 
 
 # ------------------------------------------------------------ walls ----------
@@ -941,6 +1057,65 @@ def overhang(tri, angle=45.0):
                 best = (area, min(e[0], e[1]), float(pts[:, 2].mean()))
         span, fz = best[1], best[2]
     return float(ar[over].sum()), span, fz
+
+
+def overhang_regions(tri, angle=45.0, min_area=1.0, rest=None, z0=None):
+    """connected patches facing down more steeply than angle (not on the bed, not resting on `rest`, the other
+    bodies printed with it): [(area, z above bed, centre, extent, flat)]"""
+    n = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+    ar = np.linalg.norm(n, axis=1) / 2
+    ok = ar > 1e-9
+    nz = np.zeros(len(tri))
+    nz[ok] = n[ok, 2] / (2 * ar[ok])
+    z0 = tri[:, :, 2].min() if z0 is None else z0
+    bed = np.all(tri[:, :, 2] < z0 + 0.05, axis=1)
+    over = (nz < -math.cos(math.radians(angle))) & ~bed
+    if rest is not None and over.any():
+        for i in np.where(over)[0]:
+            c = tri[i].mean(0)
+            if len(rest.ray_cast([c[0], c[1], c[2] - 0.03], [c[0], c[1], z0 - 1.0])) % 2:
+                over[i] = False
+    if not over.any():
+        return []
+    sub, sar, snz = tri[over], ar[over], nz[over]
+    v, f = weld(sub, 3)
+    par = np.arange(len(v))
+
+    def find(x):
+        while par[x] != x:
+            par[x] = par[par[x]]
+            x = par[x]
+        return x
+    for a, b, c in f:
+        ra = find(a)
+        par[find(b)] = ra
+        par[find(c)] = ra
+    root = np.array([find(x) for x in f[:, 0]])
+    out = []
+    for r in np.unique(root):
+        sel = root == r
+        area = float(sar[sel].sum())
+        if area < min_area:
+            continue
+        pts = sub[sel].reshape(-1, 3)
+        lo, hi = pts.min(0), pts.max(0)
+        flat = float(sar[sel][snz[sel] < -0.985].sum()) / area
+        out.append((area, float(lo[2] - z0), (lo + hi) / 2, hi - lo, flat))
+    return sorted(out, key=lambda x: -x[0])
+
+
+def overhang_lines(t, back, label, rs=None):
+    """overhang patches of a print-oriented mesh t; back(point) maps a point to model coordinates"""
+    rs = overhang_regions(t) if rs is None else sorted(rs, key=lambda x: -x[0])
+    out = []
+    for area, z, c, e, flat in rs[:4]:
+        m = back(c)
+        kind = "flat underside (a bridge if both ends are held, otherwise support)" if flat > 0.6 else "slope steeper than 45° (support, or reshape it to 45°)"
+        out.append("   overhang %s: %.0f mm2 at %.1f mm above the bed, %s, spans %.1f x %.1f; in the model around x%.1f y%.1f z%.1f" % (
+            label, area, z, kind, e[0], e[1], m[0], m[1], m[2]))
+    if len(rs) > 4:
+        out.append("   overhang %s: ... %d smaller patches, %.0f mm2" % (label, len(rs) - 4, sum(r[0] for r in rs[4:])))
+    return out
 
 
 ORIENTS = ["", "x90", "x180", "x270", "y90", "y270"]
@@ -1126,8 +1301,11 @@ def print_set(parts, outdir, rev, scad, colors):
         spec = orient(p)
         t = p["tri"] @ rot_matrix(spec).T
         lo, hi = t.reshape(-1, 3).min(0), t.reshape(-1, 3).max(0)
-        t = t - np.array([(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, lo[2]])
+        sh = np.array([(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, lo[2]])
+        t = t - sh
         fn = uniq(safe(p["label"])) + ".stl"
+        R = rot_matrix(spec)
+        ohl = overhang_lines(t, lambda c, R=R, sh=sh: (c + sh) @ R, fn)
         t, note = drop_pieces(fn, t)
         write_stl(os.path.join(outdir, fn), t)
         a, span, fz = overhang(t)
@@ -1136,6 +1314,7 @@ def print_set(parts, outdir, rev, scad, colors):
         qtys[fn[:-4]] = p["qty"]
         lines.append("%s%s | %s | %.1f mm tall | overhang %.0f mm2%s%s" % (fn, " x%d" % p["qty"] if p["qty"] > 1 else "", spec or "as modelled", h, a,
                      " | widest flat underside %.1f mm at z %.1f" % (span, fz) if span > 0.5 else "", note))
+        lines += ohl
     for name, ps in plates.items():
         specs = {orient(p) for p in ps if p["tags"].get("print")}
         spec = sorted(specs)[0] if specs else ""
@@ -1152,14 +1331,109 @@ def print_set(parts, outdir, rev, scad, colors):
         float_note(fn, [it["tri"] for it in items])
         back = read_3mf(os.path.join(outdir, fn))
         okv = all(abs(stats(b)["vol"] - stats(it["tri"])["vol"]) < max(0.5, 1e-3 * stats(it["tri"])["vol"]) for (_, b), it in zip(back, items))
-        a, span, fz = overhang(np.concatenate([it["tri"] for it in items]))
+        allt = np.concatenate([it["tri"] for it in items])
+        zb = allt[:, :, 2].min()
+        rs = []
+        for i, it in enumerate(items):
+            others = [manifold({"tri": o["tri"]}) for j, o in enumerate(items) if j != i]
+            others = [m for m in others if m is not None]
+            rs += overhang_regions(it["tri"], min_area=0.0, rest=union(others) if others and m3() is not None else None, z0=zb)
+        a = sum(r[0] for r in rs)
+        rs = [r for r in rs if r[0] >= 1.0]
         lines.append("%s | %s | %d bodies registered (%s) | %.1f mm tall | overhang %.0f mm2%s" % (
             fn, spec or "as modelled", len(items), ", ".join("%s=%s" % (it["name"], it["mat"]) for it in items), hi[2] - lo[2], a,
             "" if okv else " | RE-READ CHECK FAILED"))
+        lines += overhang_lines(allt, lambda c, R=R, sh=sh: (c + sh) @ R, fn, rs)
     for l in lines:
-        say("print: " + l)
+        say(l if l.startswith("   ") else "print: " + l)
     manifest(outdir, rev, scad, {k: v for k, v in qtys.items() if v > 1})
-    say("print: %d files -> %s (rev %s)" % (len(lines), outdir, rev))
+    say("print: %d files -> %s (rev %s)" % (len([l for l in lines if not l.startswith("   ")]), outdir, rev))
+
+
+# ------------------------------------------------------------ against --------
+def canon_hash(tri):
+    """hash of a mesh that ignores triangle order and which vertex each triangle starts at"""
+    q = np.round(np.asarray(tri, dtype=np.float64) * 1000).astype(np.int64)
+    _, rank = np.unique(q.reshape(-1, 3), axis=0, return_inverse=True)
+    rank = rank.reshape(-1, 3)
+    k = np.argmin(rank, axis=1)
+    idx = (k[:, None] + np.arange(3)[None, :]) % 3
+    r = q[np.arange(len(q))[:, None], idx].reshape(len(q), 9)
+    r = r[np.lexsort(r.T[::-1])]
+    return hashlib.sha1(r.tobytes()).hexdigest()
+
+
+def against(parts, other, sub, root):
+    """which parts differ from an earlier version of the model (what to reprint or recut)"""
+    other = os.path.abspath(other)
+    if not other.endswith(".scad") or not os.path.isfile(other):
+        say("against: %s is not a .scad file" % other)
+        return
+    inside(other, root)
+    ob = os.path.splitext(other)[0]
+    od = ob + "_parts" + sub
+    if not os.path.isdir(od):
+        say("against: exporting %s first" % os.path.basename(other))
+        import io, contextlib
+        keep = (PFX[0], dict(FAULTS), set(IGNORE))
+        with contextlib.redirect_stdout(io.StringIO()):
+            try:
+                main([other] + (["--variant", sub.strip(os.sep)] if sub else []))
+            except SystemExit:
+                pass
+        PFX[0] = keep[0]
+        FAULTS.clear(); FAULTS.update(keep[1])
+        IGNORE.clear(); IGNORE.update(keep[2])
+    if not os.path.isdir(od):
+        say("against: no parts from %s - run asm.py on it first" % os.path.basename(other))
+        return
+    name = lambda p: p["label"] + ("" if p["label"] == p["id"] else " (%s)" % p["id"])
+    have = {f[:-4] for f in os.listdir(od) if f.endswith(".stl") and not f.endswith(".flat.stl") and not f.startswith(".")}
+    made, hw, same, new, moved = [], [], [], [], []
+    M = m3()
+    for p in parts:
+        if p.get("tri") is None:
+            continue
+        f = os.path.join(od, p["id"] + ".stl")
+        if p["id"] not in have or os.path.islink(f):
+            (hw if p["hw"] else new).append(name(p) + (" (new)" if p["hw"] else ""))
+            continue
+        o = read_stl(f)
+        so, sn = stats(o), p["st"]
+        shift = np.array(sn["lo"]) - np.array(so["lo"])
+        mv = " ".join("%s %+.2f" % ("xyz"[k], shift[k]) for k in range(3) if abs(shift[k]) > 0.005)
+        if len(o) == len(p["tri"]) and canon_hash(o - np.array(so["lo"])) == canon_hash(p["tri"] - np.array(sn["lo"])):
+            (moved if mv else same).append(p["label"] + (" (%s)" % mv if mv else ""))
+            continue
+        diff = None
+        if M is not None and manifold(p) is not None:
+            om = manifold({"tri": o + shift})
+            if om is not None:
+                diff = p["man"].volume() + om.volume() - 2 * (p["man"] ^ om).volume()
+        if diff is not None and diff < 0.01:
+            (moved if mv else same).append(p["label"] + (" (%s)" % mv if mv else ""))
+            continue
+        grew = [("%s %+.2f" % ("xyz"[k], (sn["hi"][k] - sn["lo"][k]) - (so["hi"][k] - so["lo"][k]))) for k in range(3)
+                if abs((sn["hi"][k] - sn["lo"][k]) - (so["hi"][k] - so["lo"][k])) > 0.005]
+        why = ", ".join(x for x in ["%.1f mm3 of shape differs" % diff if diff is not None else "vol %+.0f" % (sn["vol"] - so["vol"]),
+                                     "size " + " ".join(grew) if grew else ""] if x)
+        (hw if p["hw"] else made).append("%s: %s" % (name(p), why))
+    gone = sorted(have - {p["id"] for p in parts})
+    tag = os.path.basename(ob)
+    say("against %s: %d to make again, %d the same%s" % (tag, len(made) + len(new), len(same) + len(moved),
+        ", %d bought part%s changed" % (len(hw), "" if len(hw) == 1 else "s") if hw else ""))
+    for x in made:
+        say("   CHANGED " + x)
+    for x in new:
+        say("   NEW " + x)
+    for x in hw:
+        say("   bought part changed: " + x)
+    if same:
+        say("   same as %s: %s" % (tag, ", ".join(same)))
+    if moved:
+        say("   same shape, only moved: %s" % ", ".join(moved))
+    if gone:
+        say("   only in %s: %s" % (tag, ", ".join(gone)))
 
 
 # ------------------------------------------------------------ bill of materials
@@ -1517,6 +1791,18 @@ def html(sets, path, title, rev=""):
 
 
 # ------------------------------------------------------------ selftest -------
+STOPSELF = """part = "all";
+w = 12;
+parts = [ ["base","Base"], ["blk","Slider","",[0,0,0],"group=s"], ["ring","Ring"], ["pins","Pins","",[0,0,0],"pieces=2"], ["arch","Arch"] ];
+travel = [ ["s",[1,0.5,0],[0,0,4]] ];
+module pick(n){ if(part=="all"||part==n) children(); }
+pick("base") difference(){ translate([-20,-20,0]) cube([40,40,6]); translate([-w/2,-30,2]) cube([w,60,10]); }
+pick("blk") translate([-5,-5,2]) cube([10,10,3]);
+pick("ring") difference(){ translate([30,0,0]) cylinder(r=5,h=2); translate([29.6,-6,-1]) cube([0.8,12,4]); }
+pick("pins") for(x=[0,4]) translate([x,40,0]) cube([2,2,5]);
+pick("arch") translate([-40,0,0]) difference(){ cube([20,10,10]); translate([5,-1,-1]) cube([10,12,7]); }
+"""
+
 HWSELF = """include <hardware.scad>
 part = "all";
 t = 8;
@@ -1729,6 +2015,23 @@ pick("l") translate([20,0,4.02]) cube([5,5,1]);
         msg = str(e)
     TIMEOUT = old
     res.append(("a model that never finishes is stopped and leaves no temp files", "longer than 3 s" in msg and not [x for x in os.listdir(sd) if x.startswith(".asm_eval")]))
+    sd2 = os.path.join(d, "stops")
+    os.makedirs(sd2)
+    f7 = os.path.join(sd2, "s1.scad")
+    open(f7, "w").write(STOPSELF)
+    open(os.path.join(sd2, "s2.scad"), "w").write(STOPSELF.replace("w = 12;", "w = 13;").replace('pick("blk") translate([-5,-5,2])', 'pick("blk") translate([-5,-5,2.5])'))
+    b7 = io.StringIO()
+    with contextlib.redirect_stdout(b7):
+        main([f7, "--travel", "--print", "--section", "z=3,around=blk"])
+        main([os.path.join(sd2, "s2.scad"), "--against", f7])
+        main([f7, "--brief"])
+    o7 = b7.getvalue()
+    res.append(("pieces: a part cut in two is flagged; pieces=2 is accepted", "ring: PIECES 2 separate pieces" in o7 and "pins: PIECES" not in o7))
+    res.append(("stops: slider stops at 1.00 mm each way in x; nothing stops it in y", "+x 1.00 mm blk~base" in o7 and "-x 1.00 mm blk~base" in o7 and "NO STOP +y -y" in o7))
+    res.append(("against: a widened slot means reprint the base; the slider only moved", "CHANGED Base (base)" in o7 and "only moved: Slider (z +0.50)" in o7 and "1 to make again" in o7))
+    res.append(("section around=blk frames the slider", "in the window x[-7.50,7.50]" in o7 and os.path.exists(os.path.join(sd2, "s1_section_z_3_around_blk.png"))))
+    res.append(("print: a bridge is located: 100 mm2 at 6 mm, centred x-30", re.search(r"overhang Arch\.stl: 100 mm2 at 6\.0 mm above the bed, flat underside.*around x-30\.0 y5\.0 z6\.0", o7) is not None))
+    res.append(("--brief leaves out per-part size lines but keeps problems", o7.split("against s1")[-1].count("| vol") == 0 and o7.count("ring: PIECES") >= 3))
     hp = subprocess.run([sys.executable, "-I", os.path.join(HERE, "hardware.py"), "pick", "M3", "--grip", "9.5", "--nut"], capture_output=True, text=True).stdout
     hi = subprocess.run([sys.executable, "-I", os.path.join(HERE, "hardware.py"), "pick", "#8-32", "--grip", "6", "--into", "8"], capture_output=True, text=True).stdout
     res.append(("hardware.py: M3 through 9.5 mm + nut picks 16 mm, offers 12; #8-32 into 8 mm fits", "use M3 16 mm" in hp and "or M3 12 mm" in hp and hi.startswith("use #8-32")))
@@ -1792,11 +2095,16 @@ def main(argv=None):
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--only", default="")
     ap.add_argument("--title", default="")
+    ap.add_argument("--brief", action="store_true", help="only problems and one-line summaries")
+    ap.add_argument("--against", default="", help="earlier version of the model: list the parts that differ (what to reprint)")
     a = ap.parse_args(argv)
     if a.selftest or not a.scad:
         return selftest() if a.selftest else ap.print_usage()
+    BRIEF[0] = a.brief
     if engine().startswith("none"):
         sys.exit("asm.py: no OpenSCAD found - run scripts/setup.sh")
+    if a.against and os.path.abspath(a.against) == os.path.abspath(a.scad):
+        sys.exit("asm.py: --against needs an earlier version of the model, not the model itself")
     if a.only and (a.prnt or a.html or a.bundle or a.cut or a.step):
         sys.exit("asm.py: --only checks a subset; --print/--html/--bundle/--cut/--step need every part - run them without --only")
     sys.path.insert(0, HERE)
@@ -1835,6 +2143,8 @@ def main(argv=None):
         n = load(a.scad, parts, outdir, defs, t.get("_warn") or [])
         report(parts, outdir, a.all, n)
         dims_report(t.get("report"), outdir)
+        if a.against:
+            against(parts, a.against, sub, os.path.dirname(os.path.abspath(a.scad)))
         poses = travel_poses(parts, t.get("travel"), None) if t.get("travel") else {}
         if a.travel:
             g, _, mm = a.travel.partition(":")

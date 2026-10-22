@@ -5,7 +5,9 @@ PLANE: x | y | z (bounding-box midplane), x=5, y=-2.5, z=12, and an optional
 tilt of the plane about world axes: y=0,rz=30  z=4,rx=10,ry=-5.
 Prints, per part, its extent in the plane; in-plane overlaps (mm2) and gaps.
 Axis planes report world coordinates; a tilted plane reports u,v measured from
-the world point on the untilted axis (e.g. x=5,rz=30 -> origin (5,0,0))."""
+the world point on the untilted axis (e.g. x=5,rz=30 -> origin (5,0,0)).
+Zoom: add around=PART (that part's cut plus a margin; around=PART:3 for 3 mm)
+or box=u0:u1:v0:v1 in the plane's coordinates, e.g. y=0,around=lid."""
 import math, os, re, struct, subprocess, sys
 
 COLS = ["#5f8fbf", "#c98a2b", "#5aa36b", "#b5533c", "#8a6fb5", "#3f9fa8", "#b59a3e", "#6a7f95", "#c46a9a", "#4b5a6b"]
@@ -42,8 +44,33 @@ PIL = need("PIL", "pillow") or sys.exit("section.py: needs pillow")
 from PIL import Image, ImageDraw, ImageFont  # noqa: E402
 
 
+WIN = re.compile(r"^(around|box)\s*=\s*(.+)$")
+
+
+def window(spec):
+    """zoom options in a plane spec: around=PART[:margin] or box=u0:u1:v0:v1 (plane coordinates)"""
+    for p in [s.strip() for s in spec.split(",")]:
+        m = WIN.match(p)
+        if not m:
+            continue
+        if m.group(1) == "around":
+            nm, _, mg = m.group(2).partition(":")
+            try:
+                return ("around", nm.strip(), float(mg) if mg else None)
+            except ValueError:
+                raise SystemExit("section: bad margin in '%s' (use around=lid or around=lid:3)" % p)
+        try:
+            v = [float(x) for x in m.group(2).split(":")]
+        except ValueError:
+            v = []
+        if len(v) != 4 or v[0] >= v[1] or v[2] >= v[3]:
+            raise SystemExit("section: bad box '%s' (use box=u0:u1:v0:v1, in the plane's own coordinates as the section prints them)" % p)
+        return ("box", v, None)
+    return None
+
+
 def parse(spec):
-    parts = [s.strip() for s in spec.split(",") if s.strip()]
+    parts = [s.strip() for s in spec.split(",") if s.strip() and not WIN.match(s.strip())]
     m = re.match(r"^([xyz])(?:\s*=\s*(-?[0-9.]+))?$", parts[0])
     if not m:
         raise SystemExit("section: bad plane '%s' (use x=5, y=0,rz=30 ...)" % spec)
@@ -98,8 +125,26 @@ def section(items, spec, out, size=720, gapmax=0.5):
     label = spec if val is None else re.sub(r"^([xyz])(=[^,]*)?", lambda mm: "%s=%g" % (mm.group(1), round(val, 3)), spec)
     if not cut:
         return ["section %s: nothing cut (model spans %s[%.1f,%.1f])" % (label, ax, bb["xyz".index(ax)], bb["xyz".index(ax) + 3])]
+    win = window(spec)
+    if win:
+        if win[0] == "around":
+            hit = [cs for lab, cs, col, pid in cut if pid == win[1]]
+            if not hit:
+                return ["section %s: part %s is not cut by this plane" % (label, win[1])]
+            b = hit[0].bounds()
+            mg = win[2] if win[2] is not None else max(2.0, 0.25 * max(b[2] - b[0], b[3] - b[1]))
+            box = [b[0] - mg, b[2] + mg, b[1] - mg, b[3] + mg]
+        else:
+            box = win[1]
+        rect = M3.CrossSection.square([box[1] - box[0], box[3] - box[2]]).translate([box[0], box[2]])
+        cut = [(lab, cs ^ rect, col, pid) for lab, cs, col, pid in cut]
+        cut = [c for c in cut if not c[1].is_empty() and c[1].area() > 1e-6]
+        if not cut:
+            return ["section %s: nothing inside the window" % label]
     b2 = np.array([cs.bounds() for _, cs, _, _ in cut])
     lo, hi = b2[:, :2].min(0), b2[:, 2:].max(0)
+    if win:
+        lo, hi = np.array([box[0], box[2]]), np.array([box[1], box[3]])
     span = hi - lo
     pad = 30
     sc = (size - 2 * pad) / max(span[0], span[1] * (size - 2 * pad) / (size * 1.4 - 2 * pad), 1e-6)
@@ -145,7 +190,8 @@ def section(items, spec, out, size=720, gapmax=0.5):
     y0 = H - 12
     d.line([(pad, y0), (pad + step * sc, y0)], fill=(20, 20, 20), width=3)
     d.text((pad + step * sc + 6, y0 - 8), "%g mm" % step, fill=(20, 20, 20), font=font)
-    d.text((6, 6), "section %s   %s right, %s up" % (label, names[0], names[1]), fill=(20, 20, 20), font=font)
+    d.text((6, 6), "section %s   %s right, %s up%s" % (re.sub(r",\s*(around|box)=[^,]*", "", label), names[0], names[1],
+           "   window %s %.1f..%.1f, %s %.1f..%.1f" % (names[0], lo[0], hi[0], names[1], lo[1], hi[1]) if win else ""), fill=(20, 20, 20), font=font)
     for i, (lab, cs, col, pid) in enumerate(cut):
         x, y = 8 + (i % 2) * (img.width // 2), H + 8 + (i // 2) * 22
         d.rectangle([x, y + 2, x + 14, y + 16], fill=col, outline=(30, 30, 30))
@@ -155,7 +201,8 @@ def section(items, spec, out, size=720, gapmax=0.5):
         d.rectangle([8, y + 2, 22, y + 16], fill=(220, 30, 30))
         d.text((28, y + 2), "overlap", fill=(20, 20, 20), font=font)
     img.save(out)
-    lines = ["section %s -> %s: %d parts cut" % (label, out, len(cut))]
+    lines = ["section %s -> %s: %d parts cut%s" % (label, out, len(cut), " in the window %s[%.2f,%.2f] %s[%.2f,%.2f] (extents below are clipped to it)" % (
+        names[0], lo[0], hi[0], names[1], lo[1], hi[1]) if win else "")]
     for (lab, cs, col, pid), b in zip(cut, b2):
         lines.append("   %s: %s[%.2f,%.2f] %s[%.2f,%.2f] area %.1f mm2" % (pid, names[0], b[0], b[2], names[1], b[1], b[3], cs.area()))
     for i in range(len(cut)):

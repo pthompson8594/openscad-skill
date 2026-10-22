@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.4.0 - unreleased
+
+From a 22-version build of a six-axis controller:
+
+- **Split parts are flagged.** Every run counts the separate solids in each made
+  part. A part that comes apart, usually because a cut went right through it, is
+  reported as `PIECES` before it is printed. Parts meant to be several pieces take
+  a `pieces=N` tag.
+- **What to reprint.** `--against old.scad` compares with an earlier version and
+  lists each part as changed (with what changed), the same, or the same shape only
+  moved.
+- **What stops each motion.** `--travel` now reports, for each direction, how far
+  the moving group goes before it first touches something and which parts touch.
+  It says when nothing stops a motion, or when the stop is well past the travel.
+- **Zoomed sections.** A section can frame one part (`y=0,around=lid`) or an area
+  (`y=0,box=10:30:40:52`) instead of the whole assembly.
+- **Overhangs located.** The print report lists the largest overhangs with their
+  height above the bed, whether each is a flat underside (bridge or support) or a
+  steep slope, and where it is in the model. Faces resting on another body of the
+  same multi-material print count as supported.
+- **`--brief`** prints only problems and one-line summaries.
+- SKILL.md says how to find the scripts folder once and reuse it.
+
 ## 2.3.0 - 2026-10-18
 
 - **Ask for parts that have no standard.** For heat-set inserts, magnets, springs,
