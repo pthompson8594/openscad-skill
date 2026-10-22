@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.4.0 - unreleased
+## 2.4.0 - 2026-10-22
 
 - **Manufacturing drawings.** `--drawings` makes an ISO drawing of each made part
   as PDF and DXF: first-angle views with hidden lines and centre lines, an
