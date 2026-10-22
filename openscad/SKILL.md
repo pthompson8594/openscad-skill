@@ -84,6 +84,14 @@ Pick lengths before modelling the parts around them — the design follows the s
 
 Give bought parts `hw_` ids: `python3 scripts/asm.py model.scad --bom` (also with `--bundle`) writes `model_bom.csv` — bought vs made, counted by pieces × `qty=`. Screws that run into a modelled part's tapped holes: tag them `flex=<that part>`.
 
+## Design log (projects that go through versions)
+
+The memory of a project across turns and conversations is `<project>_log.md` beside the model, not the chat.
+- **Starting or resuming:** read the log before touching the model. If the user mentions earlier work and there is no log, ask for it (or for the latest `.scad` and a summary).
+- **Versions:** copy to `<project>_vN.scad` before a change the user will print, and keep the old files. Then `python3 scripts/asm.py <project>_v8.scad --check --against <project>_v7.scad --log "what changed and why"` appends an entry with the run's results and the reprint list; the first `--log` creates the file with its sections.
+- **Keep it current:** when the user reports on a print, write it under that version's **Prints and feedback**, and move what lasts into **Decisions**, **Tried and rejected** (with why), **Open questions** and **How the user works**. Short lines; edit, don't rewrite.
+- **Handing over or a second opinion:** the log plus the latest `.scad` is the package. Every `--bundle` carries the log.
+
 ## Assemblies
 
 Tables near the top of the `.scad`, the single source every tool reads. Values may be expressions, but OpenSCAD reads top to bottom, so put the tables **after** the parameters and derived values they use (a table above them sees `undef`). `parts`, `checks`, `travel`, `report`, `variants`, `variant`, `bends`, `k_factor` and `part` are reserved names: don't use them for your own parameters (asm.py stops with a name-clash message).
@@ -125,6 +133,7 @@ pick("base") base();
 - `--bom` → `model_bom.csv`: bought (`hw_`) and made parts with quantities.
 - `--against old.scad` (an earlier version beside it) lists each made part as `CHANGED` (what to reprint or recut, with why), the same, or the same shape only moved; bought parts that changed; parts only in the old version. Run it before telling the user what to reprint.
 - `--brief` prints only problems and one-line summaries (no per-part sizes, gaps or extents).
+- `--log "text"` appends a version entry to `<project>_log.md` (see Design log).
 - `--html [--title T]` → `model.html`: coloured touch viewer — parts table (show / see-through), pull-apart, cut plane (X/Y/Z slider, flip), tap two points to measure, variant switcher; move with two fingers or right/Shift-drag, zoom toward cursor or fingers, double-tap a part (or pick it and "Zoom to it") to inspect it up close, "Reset view" to come back. The assembly deliverable; present unviewed.
 - `--variant A,B` limit to some variants; outputs go to per-variant subfolders, lines are prefixed `[A]`.
 
@@ -178,4 +187,4 @@ save_stl(part, "part.stl")
 
 ## Deliverables
 
-`.scad`, interactive `.html` viewer, which params to tweak; printing: the `--print` folder (or `--bundle`); flat-pack: also the `--cut` files. Add a `--mark3d` viewer only when something needed the user's confirmation.
+`.scad`, interactive `.html` viewer, which params to tweak, what to reprint (`--against`); printing: the `--print` folder (or `--bundle`); flat-pack: also the `--cut` files. Add a `--mark3d` viewer only when something needed the user's confirmation.

@@ -20,6 +20,11 @@ From a 22-version build of a six-axis controller:
   height above the bed, whether each is a flat underside (bridge or support) or a
   steep slope, and where it is in the model. Faces resting on another body of the
   same multi-material print count as supported.
+- **Design log.** `--log "what changed and why"` keeps `<project>_log.md` beside the
+  model: one entry per version with the run's results and what to reprint, under
+  sections for decisions, rejected ideas, open questions and how the user works.
+  SKILL.md tells Claude to read it before resuming, record print feedback in it,
+  and hand it over with the latest model. Bundles carry it.
 - **`--brief`** prints only problems and one-line summaries.
 - SKILL.md says how to find the scripts folder once and reuse it.
 

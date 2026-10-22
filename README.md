@@ -58,6 +58,11 @@ and in Claude Code.
   a cut that goes right through a part is flagged before it reaches the printer.
 - **What to reprint:** compared with an earlier version of the model, it lists
   which parts changed and which are the same or only moved.
+- **Design log:** a short notes file beside the model records each version: what
+  changed and why, the check results, what to reprint and how the print went,
+  plus the decisions, rejected ideas and open questions so far. A new
+  conversation, or a second one asked for a fresh look, can pick the project up
+  from the log and the latest model.
 - **Variants:** each value of a `variant` setting exports as its own set, and
   the viewer shows them side by side or one at a time.
 - **Dimension report:** a `report` table of key heights printed every run,

@@ -11,3 +11,4 @@ __pycache__/
 *_section_*.png
 *.3mf
 *_bom.csv
+*_log.md

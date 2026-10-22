@@ -76,8 +76,12 @@ QUIET = re.compile(r"^(\S+: [0-9.]+ x [0-9.]+ x [0-9.]+ \| vol|unchanged: |parts
                    r"   same as |   same shape, only moved|   gap \S+ ~ |   \S+: [xyzuv]\[|   overhang .*: \.\.\.|bom: |print: \d+ files)")
 
 
+RUNLOG = []
+
+
 def say(*a):
     line = " ".join(str(x) for x in a)
+    RUNLOG.append(PFX[0] + line)
     if BRIEF[0] and QUIET.match(line):
         return
     print(PFX[0] + line)
@@ -1218,6 +1222,63 @@ def defuse(base):
         say("removed planted links where outputs go (targets untouched): " + ", ".join(sorted(gone)[:8]))
 
 
+# ------------------------------------------------------------ design log -----
+LOG_HEAD = """# %s design log
+
+Kept by the openscad skill beside the model. Read it before changing the design; add to it as you go.
+Facts under each version are written by asm.py --log; the rest is notes from the conversation.
+
+## What it is
+- (what the thing does, its main parts, the hardware it uses)
+
+## Decisions
+- (what was decided and why, with the version or print that settled it)
+
+## Tried and rejected
+- (what was tried, why it was dropped, so nobody brings it back)
+
+## Open questions
+- (what still has to be settled, and what would settle it)
+
+## How the user works
+- (preferences: printer and materials, supports, look and feel, how they test)
+
+## Versions
+"""
+
+
+def log_path(scad):
+    d, f = os.path.split(os.path.abspath(scad))
+    proj = re.sub(r"[_-]?v\d+[a-z]?$", "", os.path.splitext(f)[0]) or os.path.splitext(f)[0]
+    return os.path.join(d, proj + "_log.md"), proj
+
+
+def write_log(scad, text, rev, against_):
+    path, proj = log_path(scad)
+    if os.path.islink(path) or (os.path.exists(path) and (not os.path.isfile(path) or os.stat(path).st_nlink > 1)):
+        say("log: %s is a link, not a file - not writing through it" % os.path.basename(path))
+        return
+    keep = re.compile(r"(checks: |clash: |travel \S+: |   stops: |   NO STOP |   stop \S+ is |\S+: PIECES |\S+: (EMPTY|NOT WATERTIGHT|NON-MANIFOLD)|CHECK FAIL |"
+                      r"against |   CHANGED |   NEW |   bought part changed|   same as |   same shape, only moved|report: )")
+    facts = []
+    for l in RUNLOG:
+        core = re.sub(r"^\[[^\]]*\] ", "", l)
+        if keep.match(core) and l not in facts:
+            facts.append(l.strip())
+    name = os.path.splitext(os.path.basename(scad))[0]
+    when = __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M")
+    entry = ["", "### %s - %s (rev %s)" % (name, when, rev), "", "**Changed:** " + BIDI.sub("", text).strip()]
+    if facts:
+        entry += ["", "Run:"] + ["- " + f for f in facts[:40]]
+    entry += ["", "**Prints and feedback:** (what the user reported about this version)", ""]
+    new = not os.path.exists(path)
+    with open(path, "a") as fh:
+        if new:
+            fh.write(LOG_HEAD % proj)
+        fh.write("\n".join(entry) + "\n")
+    say("log: %s %s (%d facts)" % ("started" if new else "added to", os.path.basename(path), len(facts)))
+
+
 def inside(path, root):
     """refuse to write or delete anywhere but under the model's folder"""
     rp, rr = os.path.realpath(path), os.path.realpath(root)
@@ -2031,6 +2092,24 @@ pick("l") translate([20,0,4.02]) cube([5,5,1]);
     res.append(("against: a widened slot means reprint the base; the slider only moved", "CHANGED Base (base)" in o7 and "only moved: Slider (z +0.50)" in o7 and "1 to make again" in o7))
     res.append(("section around=blk frames the slider", "in the window x[-7.50,7.50]" in o7 and os.path.exists(os.path.join(sd2, "s1_section_z_3_around_blk.png"))))
     res.append(("print: a bridge is located: 100 mm2 at 6 mm, centred x-30", re.search(r"overhang Arch\.stl: 100 mm2 at 6\.0 mm above the bed, flat underside.*around x-30\.0 y5\.0 z6\.0", o7) is not None))
+    v1, v2 = os.path.join(sd2, "slot_v1.scad"), os.path.join(sd2, "slot_v2.scad")
+    shutil_ = __import__("shutil")
+    shutil_.copy(f7, v1)
+    shutil_.copy(os.path.join(sd2, "s2.scad"), v2)
+    lg = os.path.join(sd2, "slot_log.md")
+    os.symlink(os.path.join(d, "victim.txt"), lg)
+    with contextlib.redirect_stdout(io.StringIO()) as b8:
+        main([v2, "--log", "wider slot"])
+    linked = "is a link" in b8.getvalue() and open(os.path.join(d, "victim.txt")).read() == "ORIGINAL"
+    os.unlink(lg)
+    with contextlib.redirect_stdout(io.StringIO()):
+        main([v1, "--log", "first version"])
+        main([v2, "--check", "--against", v1, "--log", "slot 1 mm wider", "--bundle"])
+    lt = open(lg).read() if os.path.exists(lg) else ""
+    zs2 = [x for x in os.listdir(sd2) if x.startswith("slot_v2_") and x.endswith(".zip")]
+    res.append(("design log: one file for slot_v1 and slot_v2, entries in order with run facts, carried in the bundle, never written through a link",
+                linked and lt.startswith("# slot design log") and lt.index("### slot_v1") < lt.index("### slot_v2") and "**Changed:** slot 1 mm wider" in lt
+                and "CHANGED Base (base)" in lt and "ring: PIECES" in lt and bool(zs2) and "slot_log.md" in zipfile.ZipFile(os.path.join(sd2, zs2[0])).namelist()))
     res.append(("--brief leaves out per-part size lines but keeps problems", o7.split("against s1")[-1].count("| vol") == 0 and o7.count("ring: PIECES") >= 3))
     hp = subprocess.run([sys.executable, "-I", os.path.join(HERE, "hardware.py"), "pick", "M3", "--grip", "9.5", "--nut"], capture_output=True, text=True).stdout
     hi = subprocess.run([sys.executable, "-I", os.path.join(HERE, "hardware.py"), "pick", "#8-32", "--grip", "6", "--into", "8"], capture_output=True, text=True).stdout
@@ -2096,6 +2175,7 @@ def main(argv=None):
     ap.add_argument("--only", default="")
     ap.add_argument("--title", default="")
     ap.add_argument("--brief", action="store_true", help="only problems and one-line summaries")
+    ap.add_argument("--log", default="", help="what changed in this version and why: appended to <project>_log.md with this run's results")
     ap.add_argument("--against", default="", help="earlier version of the model: list the parts that differ (what to reprint)")
     a = ap.parse_args(argv)
     if a.selftest or not a.scad:
@@ -2183,6 +2263,8 @@ def main(argv=None):
             bom(parts, inside(base + sub.replace(os.sep, "_") + "_bom.csv", os.path.dirname(os.path.abspath(a.scad))))
         sets.append((v, parts))
     PFX[0] = ""
+    if a.log:
+        write_log(a.scad, a.log, rev, a.against)
     if a.html or a.bundle:
         html(sets, base + ".html", a.title or os.path.basename(base), rev)
     if a.bundle:
@@ -2226,6 +2308,9 @@ def main(argv=None):
             for f in sorted(os.listdir(root)):
                 if f.startswith(os.path.basename(base)) and f.endswith("_bom.csv") and not os.path.islink(os.path.join(root, f)):
                     zf.write(os.path.join(root, f), f)
+            lp = log_path(a.scad)[0]
+            if os.path.isfile(lp) and not os.path.islink(lp) and os.stat(lp).st_nlink == 1:
+                zf.write(lp, os.path.basename(lp))
         say("bundle: %s (model + %s + viewer, all rev %s; hardware left out)" % (z, " + ".join({"print": "print files", "cut": "cut files", "step": "STEP files"}[k] for k in ("print", "cut", "step") if k in got) or "no fabrication files", rev))
         if old:
             say("bundle: removed older bundle%s %s so only the current one can be sent" % ("s" if len(old) > 1 else "", ", ".join(old)))
